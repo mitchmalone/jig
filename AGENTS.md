@@ -104,7 +104,7 @@ Every repo has a single **`verify`** command = typecheck + lint + test (plus pro
 
 - One project = **one monorepo**: `apps/*` + `packages/*`.
 - Marketing site lives in the repo (`apps/www`). Shared logic between app and site is a workspace package, never a hand-synced copy.
-- The only external repos are **generated satellites** — release-pipeline outputs (e.g. a Homebrew tap). Nobody develops in them; fix the generator, not the output.
+- The only external repos are **generated satellites** — release-pipeline outputs. Nobody develops in them; fix the generator, not the output. Homebrew distribution uses **one shared tap per owner** (`<owner>/homebrew-tap`, `Formula/` + `Casks/` side by side) — never a per-project `homebrew-<project>` repo.
 - Splitting a surface into its own repo requires a written trigger (e.g. a privacy boundary that actually materializes).
 
 ## Security

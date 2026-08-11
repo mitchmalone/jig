@@ -2,6 +2,10 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-08-12 — One shared Homebrew tap per owner (standing policy)
+
+All Homebrew-distributing projects publish into the single shared tap (`<owner>/homebrew-tap`): formulae in `Formula/`, casks in `Casks/`, installs as `brew install <owner>/tap/<name>`. Per-project `homebrew-<project>` repos are never created (the one that existed is archived). Config pair per app repo: `vars.HOMEBREW_TAP_REPO` + `secrets.HOMEBREW_TAP_TOKEN` (one fine-grained PAT, Contents r/w, scoped to the tap). The token lives only on GitHub; local release scripts never push to the tap — fan-out is CI's job. Context: consolidating two per-project taps ahead of open-sourcing several more packages; one satellite instead of N, one credential instead of N.
+
 ## 2026-08-11 — Two Vercel projects per product, not three
 
 The API deploys as serverless functions inside the web app's Vercel project (static Vite build + `api/` functions coexist in one project; Hono collapses to a catch-all function) rather than as its own project. Context: three projects per product was bloating the dashboard and forced cross-project `/api/*` rewrites for same-origin auth cookies. Same-origin becomes real, one less deploy per push; coupling cost is nil since the apps share a monorepo. `www` stays separate — different framework, and one project can't serve two builds. Ignored Build Steps keep unaffected projects from redeploying.
