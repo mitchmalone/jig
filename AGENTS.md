@@ -82,6 +82,8 @@ Every repo has a single **`verify`** command = typecheck + lint + test (plus pro
 
 - Env vars for anything that changes between environments; validate at startup (Zod-parsed `src/env.ts`), no raw `process.env` elsewhere.
 - Per-app, root-level convention: `.env.<app>.example` **committed** with commented required/optional blocks; `.env.<app>.local` and other tiers **gitignored**. Templates ship `.example` files only — never a real secret in the tree.
+- **`infra` is a reserved app-scope** (`.env.infra.<tier>`) for operator credentials used from a local machine (prod DB passwords, deploy secrets). Prefer a secret manager; keeping prod-tier creds in-tree (gitignored) is a recorded deviation with a reconvergence trigger.
+- Local services bind **project-unique ports** (offset the default range per project) so multiple stacks coexist on one machine; record the ports in the project `AGENTS.md`.
 
 ## Git & Commits
 
