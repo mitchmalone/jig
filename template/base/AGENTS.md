@@ -28,6 +28,20 @@ Living state is in `docs/` — see the standard for roles and discipline. Sessio
 
 1. …
 
+<!-- Optional, for perf-sensitive products — budgets are requirements:
+
+## Performance budgets
+
+| Metric                       | Budget                  |
+| ---------------------------- | ----------------------- |
+| e.g. keystroke → new results | < 16 ms (one frame)     |
+| e.g. idle memory             | < 120 MB ceiling        |
+
+A budget miss cuts or flags the offending feature. Measure before claiming;
+record numbers in the plan file or JOURNAL. Release notes carry a
+"Performance receipts" table; the release gate refuses while `_ ms`/`_ MB`
+placeholders remain. -->
+
 ## Commands
 
 | Command       | What                                             |

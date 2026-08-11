@@ -22,7 +22,7 @@ jobs:
             echo "::error::missing $NOTES — write release notes before tagging"
             exit 1
           fi
-          if grep -qE 'vX\.Y\.Z|<!-- Written BEFORE' "$NOTES"; then
+          if grep -qE 'vX\.Y\.Z|<!-- Written BEFORE|\| _ (ms|MB)' "$NOTES"; then
             echo "::error::$NOTES still contains template placeholders"
             exit 1
           fi

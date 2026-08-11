@@ -10,3 +10,9 @@ Everything a repo needs to stand alone in the open:
 Publishable-repo hygiene extends to copy: marketing claims in `apps/www` must trace to the code that backs them — one repo makes that a same-commit concern.
 
 The release workflow's notes-first gate should also assert that any in-repo release facts (e.g. `apps/www/src/data/release.json`) match the tag version — with branch protection on `main`, the workflow can't push corrections back, so the check must fail the release instead.
+
+## When artifacts are built locally (codesigning etc.)
+
+- **No-race tag mint**: the local script pushes `main` WITHOUT tagging; `gh release create` mints the tag remotely — the tag-triggered fan-out workflow then always fires with the release and assets already published.
+- **Preflight, all fail-fast**: required tools present; repo clean AND on `main`; `gh` authed; repo visibility PUBLIC (private repos 404 release assets for brew/site consumers); tag free locally AND on origin (`ls-remote`); notes file exists with no placeholders; signing identity + notary profile present in the keychain.
+- Bash gotchas for release scripts: under `pipefail`, never `cmd | grep -q` (grep's early exit SIGPIPEs the writer, exit 141 — capture to a var, grep the var); `codesign -dv` omits Authority lines, only `-dvv` prints them.
