@@ -2,6 +2,10 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-08-11 — Two Vercel projects per product, not three
+
+The API deploys as serverless functions inside the web app's Vercel project (static Vite build + `api/` functions coexist in one project; Hono collapses to a catch-all function) rather than as its own project. Context: three projects per product was bloating the dashboard and forced cross-project `/api/*` rewrites for same-origin auth cookies. Same-origin becomes real, one less deploy per push; coupling cost is nil since the apps share a monorepo. `www` stays separate — different framework, and one project can't serve two builds. Ignored Build Steps keep unaffected projects from redeploying.
+
 ## 2026-08-11 — Founding decisions
 
 Distilled from several prior projects (TUIs, desktop, web, mobile) whose scaffolding converged. Full context in `plans/active/2026-08-11-bootstrap-the-jig.md`.
