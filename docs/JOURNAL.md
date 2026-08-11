@@ -2,6 +2,8 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-11 — Composing tui-bun + www-next: two `@types/node` majors in Bun's isolated store (www's pin vs bun-types' `*`) break the CLI typecheck with nonsense errors — pin one `@types/node` major across the workspace.
+- 2026-08-11 — Staged-file lint passes an app's files to the root ESLint, which loads the app's own flat config under the root's (different-major) ESLint → `contextOrFilename.getFilename is not a function`. Apps with their own eslint config: `exclude` them in lefthook's lint command and chain their lint into the root `lint` script.
 - 2026-08-11 — pnpm 11 silently ignores `package.json#pnpm` (overrides etc.) and `.npmrc node-linker=` — only a WARN at install. Both belong in `pnpm-workspace.yaml` (`overrides:`, `nodeLinker:`); React Native/Expo repos need `nodeLinker: hoisted` (isolated layout breaks Metro/RN codegen).
 - 2026-08-11 — A worktree got committed as an embedded repo — the jig repo never gave itself the `.gitignore` block its own template prescribes; the stamper must also follow the standard.
 - 2026-08-11 — Vendored `docs/STANDARDS.md` failed `format:check` in stamped repos — it's generated content; added to the base `.prettierignore`.
