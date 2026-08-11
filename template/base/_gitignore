@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+.DS_Store
+
+# env: commit .example templates only
+.env
+.env.*
+!.env.*.example
+
+# claude/agent personal state
+.claude/settings.local.json
+.claude/*.local.json
+.claude/worktrees/
+
+# private notes escape hatch
+local/
