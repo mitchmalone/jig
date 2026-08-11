@@ -7,10 +7,17 @@ A **jig** is a workshop tool: it holds the work steady and guides the cut, so ev
 ## Usage
 
 ```sh
+# interactive: prompts for name/flavors/layers, then offers to launch
+# your coding agent (auto-detected) on the stamped project
+node create-jig/bin/create-jig.mjs
+
+# or fully flag-driven
 node scripts/new-project.mjs --name my-thing \
   --flavors www-next,api-hono,web-vite \
   --layers ci,public
 ```
+
+Every stamp includes `docs/plans/active/0000-onboard.md` — the first session's active plan. Any agent that reads it interviews you, fills in `AGENTS.md`, seeds the docs, and closes the plan out the same way every future session will. (`create-jig` is not yet published to npm; when it is, this becomes `npm create jig`.)
 
 Compose order: `base` → flavors → layers (later files win). The stamp ends with a git repo whose `verify` gate (typecheck + lint + format check + test) passes after install.
 
