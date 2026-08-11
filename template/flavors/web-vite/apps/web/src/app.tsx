@@ -1,3 +1,3 @@
 export function App() {
-	return <h1>__PROJECT_NAME__</h1>
+	return <h1>{{PROJECT_NAME}}</h1>
 }

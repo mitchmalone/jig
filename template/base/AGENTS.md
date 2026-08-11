@@ -1,8 +1,8 @@
-# AGENTS.md — __PROJECT_NAME__
+# AGENTS.md — {{PROJECT_NAME}}
 
 <!-- One line: what this product is and who it's for. -->
 
-__PROJECT_NAME__ is …
+{{PROJECT_NAME}} is …
 
 ## Standard
 
@@ -19,8 +19,8 @@ Living state is in `docs/` — see the standard for roles and discipline. Sessio
 <!-- Table or short list: runtime, frameworks, data, deploy target. Delete what doesn't apply. -->
 
 | Surface | Choice |
-| --- | --- |
-| … | … |
+| ------- | ------ |
+| …       | …      |
 
 ## Invariants
 
@@ -30,9 +30,9 @@ Living state is in `docs/` — see the standard for roles and discipline. Sessio
 
 ## Commands
 
-| Command | What |
-| --- | --- |
-| `pnpm dev` | Run all apps in parallel |
+| Command       | What                                             |
+| ------------- | ------------------------------------------------ |
+| `pnpm dev`    | Run all apps in parallel                         |
 | `pnpm verify` | The gate: typecheck + lint + format check + test |
 
 ## Definition of done

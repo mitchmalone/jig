@@ -1,8 +1,10 @@
 {
-	"name": "@__PROJECT_NAME__/contracts",
+	"name": "@{{PROJECT_NAME}}/contracts",
 	"private": true,
 	"type": "module",
-	"exports": { ".": "./src/index.ts" },
+	"exports": {
+		".": "./src/index.ts"
+	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run"
@@ -11,7 +13,7 @@
 		"zod": "^4.4.0"
 	},
 	"devDependencies": {
-		"typescript": "^7.0.2",
+		"typescript": "^6.0.3",
 		"vitest": "^4.1.0"
 	}
 }

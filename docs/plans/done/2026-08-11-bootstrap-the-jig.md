@@ -1,6 +1,6 @@
 ---
 title: Bootstrap the jig
-status: active
+status: done
 created: 2026-08-11
 updated: 2026-08-11
 links: []
@@ -69,12 +69,12 @@ Generator mechanics: a plain `.mjs` script on bare Node (zero deps), driven by f
 
 ## Steps
 
-- [ ] **Phase 1 — Foundation.** Dogfood docs skeleton for the jig itself (STATUS, ROADMAP, JOURNAL, DECISIONS seeded with the decisions above, plans/). Write the canonical `AGENTS.md`: merge the shareable global standards (language/runtime, style, TS strictness, red/green/refactor TDD, error handling, env, git/commits, dependencies, linting, security, docs, learnings protocol, agent session discipline) with the conventions proven across prior projects (session protocol, invariants/standing-policies pattern, deferral-with-trigger pattern, definition of done). Strip anything machine- or person-private. Add `CLAUDE.md` pointer.
-- [ ] **Phase 2 — Base template.** Build `template/base/` (files above), including the docs skeleton with `_TEMPLATE.md`, the root scripts contract, and the `.claude` gitignore block. Base alone must stamp a valid empty project.
-- [ ] **Phase 3 — Flavors.** `www-next` (static-first Next), `api-hono` (+ `packages/contracts` and `packages/db` seeds), `web-vite`, `tui-bun` (toolchain swap + compile/release conventions), `desktop-tauri` (minimal: Rust standards delta, lefthook rust hooks). Keep each flavor minimal — seeds, not starter kits.
-- [ ] **Phase 4 — Layers.** `ci` (verify workflow + commitlint job) and `public` (hygiene files, gitleaks pre-commit, tag-triggered `release.yml` with conditional satellite fan-out jobs that no-op without config, release-notes template + written-first gate).
-- [ ] **Phase 5 — Generator.** `scripts/new-project.mjs` composing base + flavors + layers; stamp a throwaway project of each flavor and prove `verify` green; document usage in README.
-- [ ] **Phase 6 — Reconciliation (private, outside this repo).** Use the per-project deviation reports to bring existing projects onto the jig; feed anything they prove back into the template (e.g. auto-discovery CI matrix, smoke-suite pattern, scaffold-a-sub-app script) as optional layers.
+- [x] **Phase 1 — Foundation.** Dogfood docs skeleton for the jig itself (STATUS, ROADMAP, JOURNAL, DECISIONS seeded with the decisions above, plans/). Write the canonical `AGENTS.md`: merge the shareable global standards (language/runtime, style, TS strictness, red/green/refactor TDD, error handling, env, git/commits, dependencies, linting, security, docs, learnings protocol, agent session discipline) with the conventions proven across prior projects (session protocol, invariants/standing-policies pattern, deferral-with-trigger pattern, definition of done). Strip anything machine- or person-private. Add `CLAUDE.md` pointer.
+- [x] **Phase 2 — Base template.** Build `template/base/` (files above), including the docs skeleton with `_TEMPLATE.md`, the root scripts contract, and the `.claude` gitignore block. Base alone must stamp a valid empty project.
+- [x] **Phase 3 — Flavors.** `www-next` (static-first Next), `api-hono` (+ `packages/contracts` and `packages/db` seeds), `web-vite`, `tui-bun` (toolchain swap + compile/release conventions), `desktop-tauri` (minimal: Rust standards delta, lefthook rust hooks). Keep each flavor minimal — seeds, not starter kits.
+- [x] **Phase 4 — Layers.** `ci` (verify workflow + commitlint job) and `public` (hygiene files, gitleaks pre-commit, tag-triggered `release.yml` with conditional satellite fan-out jobs that no-op without config, release-notes template + written-first gate).
+- [x] **Phase 5 — Generator.** `scripts/new-project.mjs` composing base + flavors + layers; stamp a throwaway project of each flavor and prove `verify` green; document usage in README.
+- [~] **Phase 6 (tracked privately, outside this repo) — Reconciliation (private, outside this repo).** Use the per-project deviation reports to bring existing projects onto the jig; feed anything they prove back into the template (e.g. auto-discovery CI matrix, smoke-suite pattern, scaffold-a-sub-app script) as optional layers.
 
 ## Acceptance criteria
 

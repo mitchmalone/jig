@@ -25,5 +25,5 @@ export default tseslint.config(
 			// Operational scripts talk to a human via stdout.
 			'no-console': 'off',
 		},
-	}
+	},
 )

@@ -1,5 +1,5 @@
 {
-	"name": "@__PROJECT_NAME__/api",
+	"name": "@{{PROJECT_NAME}}/api",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -8,14 +8,15 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@__PROJECT_NAME__/contracts": "workspace:*",
+		"@{{PROJECT_NAME}}/contracts": "workspace:*",
 		"@hono/node-server": "^1.19.0",
 		"hono": "^4.13.0",
 		"zod": "^4.4.0"
 	},
 	"devDependencies": {
+		"@types/node": "^24.0.0",
 		"tsx": "^4.20.0",
-		"typescript": "^7.0.2",
+		"typescript": "^6.0.3",
 		"vitest": "^4.1.0"
 	}
 }

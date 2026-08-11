@@ -1,4 +1,4 @@
-import { healthSchema } from '@__PROJECT_NAME__/contracts'
+import { healthSchema } from '@{{PROJECT_NAME}}/contracts'
 import { describe, expect, it } from 'vitest'
 
 import { app } from './app'
