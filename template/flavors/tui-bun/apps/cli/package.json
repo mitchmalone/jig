@@ -1,0 +1,11 @@
+{
+	"name": "@__PROJECT_NAME__/cli",
+	"private": true,
+	"type": "module",
+	"bin": { "__PROJECT_NAME__": "./src/index.ts" },
+	"scripts": {
+		"dev": "bun run src/index.ts",
+		"build": "bun build --compile --outfile dist/__PROJECT_NAME__ src/index.ts",
+		"typecheck": "tsc --noEmit"
+	}
+}

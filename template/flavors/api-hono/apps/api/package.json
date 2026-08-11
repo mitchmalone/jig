@@ -1,0 +1,21 @@
+{
+	"name": "@__PROJECT_NAME__/api",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "tsx watch src/dev.ts",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@__PROJECT_NAME__/contracts": "workspace:*",
+		"@hono/node-server": "^1.19.0",
+		"hono": "^4.13.0",
+		"zod": "^4.4.0"
+	},
+	"devDependencies": {
+		"tsx": "^4.20.0",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.0"
+	}
+}

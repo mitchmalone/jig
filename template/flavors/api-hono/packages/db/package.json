@@ -1,0 +1,12 @@
+{
+	"name": "@__PROJECT_NAME__/db",
+	"private": true,
+	"type": "module",
+	"exports": { ".": "./src/schema.ts" },
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2"
+	}
+}
