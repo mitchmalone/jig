@@ -67,7 +67,7 @@ jobs:
       - if: steps.config.outputs.configured == 'true'
         name: Render and push formula
         env:
-          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           # Render the formula/cask from a unit-tested generator script in this
           # repo, clone ${{ vars.HOMEBREW_TAP_REPO }}, commit, push.
