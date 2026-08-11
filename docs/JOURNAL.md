@@ -2,6 +2,7 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-11 — pnpm 11 silently ignores `package.json#pnpm` (overrides etc.) and `.npmrc node-linker=` — only a WARN at install. Both belong in `pnpm-workspace.yaml` (`overrides:`, `nodeLinker:`); React Native/Expo repos need `nodeLinker: hoisted` (isolated layout breaks Metro/RN codegen).
 - 2026-08-11 — A worktree got committed as an embedded repo — the jig repo never gave itself the `.gitignore` block its own template prescribes; the stamper must also follow the standard.
 - 2026-08-11 — Vendored `docs/STANDARDS.md` failed `format:check` in stamped repos — it's generated content; added to the base `.prettierignore`.
 - 2026-08-11 — Prettier rewrote `__PROJECT_NAME__` placeholders in markdown as `**PROJECT_NAME**` (bold syntax) — switched all placeholders to `{{PROJECT_NAME}}` style, which every formatter leaves alone.

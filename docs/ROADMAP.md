@@ -8,7 +8,7 @@ Docs skeleton, canonical `AGENTS.md`, base template, core flavors, ci/public lay
 
 ## Backlog (deferred, with triggers)
 
-- **Expo/EAS mobile flavor** — trigger: next mobile project.
+- **Expo/EAS mobile flavor** — trigger: next mobile project. (Known already: `nodeLinker: hoisted` in pnpm-workspace.yaml — isolated layout breaks Metro/RN codegen.)
 - **`daemon-bun` flavor** (long-running background service: launchd plist + systemd unit templates, install/uninstall scripts, offline event spool, darwin-arm64 + linux-arm64 compile matrix in the release workflow) — trigger: the fleet-monitor project's daemon stabilizes, or a second project needs a background service. Build in-project first, upstream what proves out.
 - **`+collab` layer** (CODEOWNERS, PR template, branch protection, fence script) — trigger: a second contributor on any jig project.
 - **Auto-discovery CI matrix** for multi-app repos — trigger: a jig project where per-app CI wall-time hurts.
