@@ -2,6 +2,7 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-11 — Template briefly standardized on tabs (`useTabs: true`) — an authoring artifact mistaken for a decision; house style is Prettier's default spaces. Config fixed, template reformatted; no reconciled project inherited it (all kept their own configs).
 - 2026-08-11 — `prepare: lefthook install` exits 128 on any tarball-based builder (EAS extracts without `.git`) — guard it: `git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true`. Husky silently no-oped there, so the failure only appeared after the lefthook migration.
 - 2026-08-11 — pnpm 11 needs Node >=22.13 (imports `node:sqlite`) — builder images pinned to Node 20 die at install; check CI/builder image Node versions when migrating existing repos to pnpm.
 - 2026-08-11 — pnpm forwards a literal `--` in `pnpm run script -- --flag` to the underlying CLI — commands documented for npm need the `--` dropped.

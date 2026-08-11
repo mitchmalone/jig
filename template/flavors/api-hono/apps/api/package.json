@@ -1,22 +1,22 @@
 {
-	"name": "@{{PROJECT_NAME}}/api",
-	"private": true,
-	"type": "module",
-	"scripts": {
-		"dev": "tsx watch src/dev.ts",
-		"typecheck": "tsc --noEmit",
-		"test": "vitest run"
-	},
-	"dependencies": {
-		"@{{PROJECT_NAME}}/contracts": "workspace:*",
-		"@hono/node-server": "^1.19.0",
-		"hono": "^4.13.0",
-		"zod": "^4.4.0"
-	},
-	"devDependencies": {
-		"@types/node": "^24.0.0",
-		"tsx": "^4.20.0",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.0"
-	}
+  "name": "@{{PROJECT_NAME}}/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/dev.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@{{PROJECT_NAME}}/contracts": "workspace:*",
+    "@hono/node-server": "^1.19.0",
+    "hono": "^4.13.0",
+    "zod": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.0"
+  }
 }

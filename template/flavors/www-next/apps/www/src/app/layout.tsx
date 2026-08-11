@@ -4,14 +4,14 @@ import type { ReactNode } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
-	title: '{{PROJECT_NAME}}',
-	description: '{{PROJECT_NAME}}',
+  title: '{{PROJECT_NAME}}',
+  description: '{{PROJECT_NAME}}',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-	return (
-		<html lang="en">
-			<body>{children}</body>
-		</html>
-	)
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
 }

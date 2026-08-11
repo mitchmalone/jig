@@ -1,13 +1,13 @@
 {
-	"name": "@{{PROJECT_NAME}}/cli",
-	"private": true,
-	"type": "module",
-	"bin": {
-		"{{PROJECT_NAME}}": "./src/index.ts"
-	},
-	"scripts": {
-		"dev": "bun run src/index.ts",
-		"build": "bun build --compile --outfile dist/{{PROJECT_NAME}} src/index.ts",
-		"typecheck": "tsc --noEmit"
-	}
+  "name": "@{{PROJECT_NAME}}/cli",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "{{PROJECT_NAME}}": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build --compile --outfile dist/{{PROJECT_NAME}} src/index.ts",
+    "typecheck": "tsc --noEmit"
+  }
 }

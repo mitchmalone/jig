@@ -1,14 +1,14 @@
 {
-	"name": "@{{PROJECT_NAME}}/db",
-	"private": true,
-	"type": "module",
-	"exports": {
-		".": "./src/schema.ts"
-	},
-	"scripts": {
-		"typecheck": "tsc --noEmit"
-	},
-	"devDependencies": {
-		"typescript": "^6.0.3"
-	}
+  "name": "@{{PROJECT_NAME}}/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
 }
