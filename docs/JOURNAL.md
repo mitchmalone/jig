@@ -2,6 +2,9 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-11 — `prepare: lefthook install` exits 128 on any tarball-based builder (EAS extracts without `.git`) — guard it: `git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true`. Husky silently no-oped there, so the failure only appeared after the lefthook migration.
+- 2026-08-11 — pnpm 11 needs Node >=22.13 (imports `node:sqlite`) — builder images pinned to Node 20 die at install; check CI/builder image Node versions when migrating existing repos to pnpm.
+- 2026-08-11 — pnpm forwards a literal `--` in `pnpm run script -- --flag` to the underlying CLI — commands documented for npm need the `--` dropped.
 - 2026-08-11 — Composing tui-bun + www-next: two `@types/node` majors in Bun's isolated store (www's pin vs bun-types' `*`) break the CLI typecheck with nonsense errors — pin one `@types/node` major across the workspace.
 - 2026-08-11 — Staged-file lint passes an app's files to the root ESLint, which loads the app's own flat config under the root's (different-major) ESLint → `contextOrFilename.getFilename is not a function`. Apps with their own eslint config: `exclude` them in lefthook's lint command and chain their lint into the root `lint` script.
 - 2026-08-11 — pnpm 11 silently ignores `package.json#pnpm` (overrides etc.) and `.npmrc node-linker=` — only a WARN at install. Both belong in `pnpm-workspace.yaml` (`overrides:`, `nodeLinker:`); React Native/Expo repos need `nodeLinker: hoisted` (isolated layout breaks Metro/RN codegen).
