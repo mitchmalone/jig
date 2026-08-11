@@ -69,7 +69,8 @@ jobs:
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          # Render the formula/cask from a unit-tested generator script in this
-          # repo, clone ${{ vars.HOMEBREW_TAP_REPO }}, commit, push.
+          # Render the formula (Formula/<name>.rb) or cask (Casks/<name>.rb)
+          # from a unit-tested generator script in this repo, clone the shared
+          # tap ${{ vars.HOMEBREW_TAP_REPO }} (<owner>/homebrew-tap), commit, push.
           # Satellites are generated output: fix the generator, not the output.
           echo "wire your formula renderer here"

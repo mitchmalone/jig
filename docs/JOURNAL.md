@@ -2,6 +2,7 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-12 — `brew untap <tap> --force` UNINSTALLS the tap's casks (deletes the .app), and a locally-tapped clone doesn't see new casks until `brew update` — tap-migration order: tap/pull the new tap → `brew install` from it → only then untap the old one.
 - 2026-08-11 — Under `set -o pipefail`, `cmd | grep -q` exits 141 (grep's early exit SIGPIPEs the writer) — capture output to a variable and grep that. And `codesign -dv` doesn't print Authority lines; only `-dvv` does.
 - 2026-08-11 — Template briefly standardized on tabs (`useTabs: true`) — an authoring artifact mistaken for a decision; house style is Prettier's default spaces. Config fixed, template reformatted; no reconciled project inherited it (all kept their own configs).
 - 2026-08-11 — `prepare: lefthook install` exits 128 on any tarball-based builder (EAS extracts without `.git`) — guard it: `git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true`. Husky silently no-oped there, so the failure only appeared after the lefthook migration.
