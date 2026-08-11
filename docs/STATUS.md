@@ -11,7 +11,7 @@ The cursor. Done / in progress / next / blocked. Keep it short.
 
 ## In progress
 
-- Nothing.
+- `create-jig` CLI (PR): interactive stamp + agent detection + `0000-onboard.md` handoff. Unpublished — npm publish deferred (trigger: announcing the repo publicly).
 
 ## Next
 

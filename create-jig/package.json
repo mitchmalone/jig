@@ -1,0 +1,16 @@
+{
+	"name": "create-jig",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Stamp a project from the jig, then hand off to your coding agent",
+	"type": "module",
+	"bin": {
+		"create-jig": "./bin/create-jig.mjs"
+	},
+	"scripts": {
+		"test": "node --test"
+	},
+	"engines": {
+		"node": ">=24"
+	}
+}
