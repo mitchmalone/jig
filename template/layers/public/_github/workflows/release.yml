@@ -28,6 +28,8 @@ jobs:
           fi
 
       # --- replace with your real build (bun compile matrix, tauri build, …) ---
+      # Cross-platform binaries: use a job matrix over targets, e.g.
+      #   bun build --compile --target=bun-darwin-arm64 / bun-linux-arm64 / bun-linux-x64
       - name: Build artifacts
         run: |
           mkdir -p dist
