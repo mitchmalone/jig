@@ -2,6 +2,8 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-12 — `verbatimModuleSyntax` in a Next repo stops SWC eliding default imports used only as types — a browser-only lib loaded at SSR module scope crashed prerender with `window is not defined`, and tsc shows no error (package exports both value and type). Fix: `import type`.
+- 2026-08-12 — Gitignored build-time JSON imports (content pipelines) break `tsc --noEmit` in CI — ambient `declare module` typings decouple typecheck from the pipeline.
 - 2026-08-12 — pnpm 11 deprecates `$`-reference overrides (`sharp: "$sharp"`) — use `catalog:` entries in pnpm-workspace.yaml referenced from both deps and overrides.
 - 2026-08-12 — A repo-wide `ajv: 6` override crashes commitlint at commit-msg time (`Keyword [object Object] is not a valid identifier`) — @commitlint/config-validator needs ajv 8; scope an exemption: `"@commitlint/config-validator>ajv": ^8`.
 - 2026-08-12 — Migrating package managers regenerates the lockfile and re-resolves `^` ranges — expect (and budget for) new lint/type findings from newer minors mid-migration; they're real findings, not migration breakage.
