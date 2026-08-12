@@ -24,7 +24,9 @@ Living state is in `docs/` — see the standard for roles and discipline. Sessio
 
 ## Invariants
 
-<!-- Numbered, non-negotiable, product-specific. Decided once — don't relitigate here; that's DECISIONS.md's job. -->
+<!-- Numbered, non-negotiable, product-specific. Decided once — don't relitigate here; that's DECISIONS.md's job. Exemplars of the right altitude, from a real project:
+"**`packages/<core>` is pure.** No I/O, no network, no direct `Date.now()` — time is injected. Every behaviour is unit-tested. If you're tempted to import anything with a side effect, you're in the wrong package."
+"Sync state transitions, never ticks — nothing that runs every second may touch the network." -->
 
 1. …
 
