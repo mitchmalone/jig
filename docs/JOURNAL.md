@@ -2,6 +2,9 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-12 — pnpm 11 EDITS `pnpm-workspace.yaml` in place on install, inserting `pkg: set this to true or false` placeholders under `allowBuilds` — resolve them before the next install.
+- 2026-08-12 — `sharp` under `allowBuilds: true` attempts a node-gyp source build and fails noisily; the prebuilt `@img/sharp-*` optional deps are what actually load — set `sharp: false`. `unrs-resolver` (via eslint-config-next) needs `true`.
+- 2026-08-12 — Next generates more than `next-env.d.ts`: typed-routes `types/routes.d.ts` + `types/validator.ts` fail `--max-warnings 0` and format:check — add explicit lint/prettier ignores in Next repos.
 - 2026-08-12 — `verbatimModuleSyntax` in a Next repo stops SWC eliding default imports used only as types — a browser-only lib loaded at SSR module scope crashed prerender with `window is not defined`, and tsc shows no error (package exports both value and type). Fix: `import type`.
 - 2026-08-12 — Gitignored build-time JSON imports (content pipelines) break `tsc --noEmit` in CI — ambient `declare module` typings decouple typecheck from the pipeline.
 - 2026-08-12 — pnpm 11 deprecates `$`-reference overrides (`sharp: "$sharp"`) — use `catalog:` entries in pnpm-workspace.yaml referenced from both deps and overrides.
