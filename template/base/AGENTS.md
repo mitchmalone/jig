@@ -6,9 +6,7 @@
 
 ## Standard
 
-This project is built on the [jig](https://github.com/mitchmalone/jig) and follows its `AGENTS.md` standard. This file carries **deltas only** — identity, stack, invariants — never restatements. Divergences from the standard live in `DEVIATIONS.md` with a justification.
-
-<!-- Public repos: vendor the standard as docs/STANDARDS.md (the +public layer does this) so this repo stands alone. -->
+This project was stamped from the [jig](https://github.com/mitchmalone/jig). Its standard lives **in this repo** at `docs/STANDARDS.md` (vendored at stamp time) — that copy governs; do not consult or "upgrade to" the jig's current version mid-task. This file carries **deltas only** — identity, stack, invariants — never restatements. Divergences live in `DEVIATIONS.md` with a justification. Refreshing `docs/STANDARDS.md` from the jig is a deliberate reconciliation, done as its own change.
 
 ## Docs system
 

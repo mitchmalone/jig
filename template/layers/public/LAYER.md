@@ -3,7 +3,7 @@
 Everything a repo needs to stand alone in the open:
 
 - **Hygiene files** — LICENSE (MIT), CONTRIBUTING, CODE_OF_CONDUCT, issue templates.
-- **Vendored standard** — the generator copies the jig's `AGENTS.md` into `docs/STANDARDS.md` (with a version stamp) so contributors and their agents see the rules without any private file.
+- **Vendored standard** — every stamp carries `docs/STANDARDS.md` (base behavior); for public repos this doubles as the contributor-facing rulebook, no private file needed.
 - **Secret scanning** — this layer's `lefthook.yml` replaces the base one, adding a gitleaks pre-commit scan. Keep the two files in sync when the base changes.
 - **Release fan-out** — `release.yml`: tag `v*` → verify → build → GitHub Release (gated on a release-notes file written first from `docs/releases/_TEMPLATE.md`) → satellite jobs (e.g. Homebrew tap) that no-op honestly when their repo variable/token isn't configured. **One shared tap per person, not per project**: `vars.HOMEBREW_TAP_REPO=<owner>/homebrew-tap`, formulas under `Formula/`, casks under `Casks/`, installs as `brew install <owner>/tap/<name>`. Auth: `secrets.HOMEBREW_TAP_TOKEN` — one fine-grained PAT (Contents r/w) scoped to the single tap repo, same value stored per app repo, and it lives ONLY on GitHub: the local release script never touches the tap — fan-out is CI's job. New projects never create a `homebrew-<project>` repo. Satellites are generated output: fix the generator, not the output. The build job is a scaffold — replace the build step with your artifact (bun compile matrix, tauri build, etc.).
 

@@ -139,8 +139,9 @@ if (existsSync(bunVariant)) {
 // 3. Bun repos have no pnpm workspace file.
 if (isBun) rmSync(join(target, 'pnpm-workspace.yaml'), { force: true })
 
-// 4. Public repos vendor the standard so they stand alone.
-if (args.layers.includes('public')) {
+// 4. Every stamp vendors the standard — the jig is a stamp, not a runtime
+// dependency; the in-repo copy governs from here on.
+{
   const standard = readFileSync(join(jigRoot, 'AGENTS.md'), 'utf8')
   const stamp = `<!-- vendored from the jig on ${new Date().toISOString().slice(0, 10)} -->\n\n`
   mkdirSync(join(target, 'docs'), { recursive: true })

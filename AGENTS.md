@@ -4,11 +4,13 @@ The canonical standard for projects built on the jig. Self-contained: everything
 
 ## Layering
 
-Rules resolve in three tiers, most specific wins:
+**The jig is a stamp, not a runtime dependency.** At stamp time this file is copied into the project as `docs/STANDARDS.md`; from then on the in-repo copy is the operative standard for that repo. Nothing outside the repo is consulted — jig updates reach a project only through deliberate reconciliation, never ambiently.
 
-1. **This file** — the standard. Stable, project-agnostic.
-2. **Project `AGENTS.md`** — identity, stack, invariants, and *deltas only*. Never restates this file.
-3. **Project `DEVIATIONS.md`** — where the project diverges from the standard: what, why, and the trigger that would reconverge it.
+Rules resolve in three tiers inside the repo, most specific wins:
+
+1. **`docs/STANDARDS.md`** — the vendored standard (this file, as of the stamp).
+2. **Project `AGENTS.md`** — identity, stack, invariants, and *deltas only*. Never restates the standard.
+3. **Project `DEVIATIONS.md`** — where the project diverges from its standard: what, why, and the trigger that would reconverge it.
 
 **Overrides are documented, never silent.** If a project does something differently, it says so in writing with a justification.
 

@@ -2,6 +2,10 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-08-12 — The jig is a stamp, not a runtime dependency
+
+Every stamp vendors the full standard into the project (`docs/STANDARDS.md`); the in-repo copy governs thereafter, and no file inside or outside a project points at the jig repo as live authority. The machine-global AGENTS.md carries personal context only, zero standards authority. Reasoning: a live reference is redundant next to the vendored copy, can fight a project's legitimate deviations as the jig evolves, and leaks jig rules into repos that follow other conventions (forks, team projects). Jig updates reach projects only through deliberate reconciliation.
+
 ## 2026-08-12 — One shared Homebrew tap per owner (standing policy)
 
 All Homebrew-distributing projects publish into the single shared tap (`<owner>/homebrew-tap`): formulae in `Formula/`, casks in `Casks/`, installs as `brew install <owner>/tap/<name>`. Per-project `homebrew-<project>` repos are never created (the one that existed is archived). Config pair per app repo: `vars.HOMEBREW_TAP_REPO` + `secrets.HOMEBREW_TAP_TOKEN` (one fine-grained PAT, Contents r/w, scoped to the tap). The token lives only on GitHub; local release scripts never push to the tap — fan-out is CI's job. Context: consolidating two per-project taps ahead of open-sourcing several more packages; one satellite instead of N, one credential instead of N.
