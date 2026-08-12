@@ -15,7 +15,8 @@ The cursor. Done / in progress / next / blocked. Keep it short.
 
 ## Next
 
-- Reconcile existing private projects against the jig (tracked privately, outside this repo).
+- Fleet follow-up: copy-not-reference semantics (2026-08-12 decision) means already-reconciled PRIVATE projects should vendor `docs/STANDARDS.md` and reword their AGENTS.md "Standard" section on next touch — only the two public repos vendored it.
+- Unpark note: the create-jig PR branch's `compose.mjs` still has public-only vendoring — port the every-stamp vendoring change when unparking.
 - First real stamp will shake out template rot — journal anything it catches.
 
 ## Blocked
