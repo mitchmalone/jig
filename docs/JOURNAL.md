@@ -2,6 +2,10 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-12 — pnpm doesn't auto-run npm-style `pre*` scripts — Vercel/CI builds silently skip `prebuild` content-fetch steps; inline them into `dev`/`build` when migrating.
+- 2026-08-12 — `next lint` only covers app/components/pages/lib/src — switching the gate to `eslint .` surfaces a hidden backlog (stories/, templates/, root configs); budget for it.
+- 2026-08-12 — eslint-config-next ≥16.3 enables React-compiler-based react-hooks rules — dozens of real-but-refactor-risky findings in legacy components; defer with a DEVIATIONS entry rather than folding into a migration.
+- 2026-08-12 — Ambient wildcard module declarations for gitignored JSON only apply when resolution FAILS — locally the real file wins and the declared shape drifts silently; optional-vs-required mismatches error even with `strict: false`.
 - 2026-08-12 — pnpm 11 EDITS `pnpm-workspace.yaml` in place on install, inserting `pkg: set this to true or false` placeholders under `allowBuilds` — resolve them before the next install.
 - 2026-08-12 — `sharp` under `allowBuilds: true` attempts a node-gyp source build and fails noisily; the prebuilt `@img/sharp-*` optional deps are what actually load — set `sharp: false`. `unrs-resolver` (via eslint-config-next) needs `true`.
 - 2026-08-12 — Next generates more than `next-env.d.ts`: typed-routes `types/routes.d.ts` + `types/validator.ts` fail `--max-warnings 0` and format:check — add explicit lint/prettier ignores in Next repos.
