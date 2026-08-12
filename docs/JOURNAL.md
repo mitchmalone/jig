@@ -2,6 +2,7 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-08-12 — After removing husky, `lefthook install` refuses with "Custom hooks paths are not supported" — husky leaves `core.hooksPath=.husky/_` in local git config; `git config --unset-all --local core.hooksPath` first. Every husky-era repo migration hits this.
 - 2026-08-12 — `brew untap <tap> --force` UNINSTALLS the tap's casks (deletes the .app), and a locally-tapped clone doesn't see new casks until `brew update` — tap-migration order: tap/pull the new tap → `brew install` from it → only then untap the old one.
 - 2026-08-11 — Under `set -o pipefail`, `cmd | grep -q` exits 141 (grep's early exit SIGPIPEs the writer) — capture output to a variable and grep that. And `codesign -dv` doesn't print Authority lines; only `-dvv` does.
 - 2026-08-11 — Template briefly standardized on tabs (`useTabs: true`) — an authoring artifact mistaken for a decision; house style is Prettier's default spaces. Config fixed, template reformatted; no reconciled project inherited it (all kept their own configs).

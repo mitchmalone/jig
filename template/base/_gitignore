@@ -14,5 +14,9 @@ dist/
 .claude/*.local.json
 .claude/worktrees/
 
-# private notes escape hatch
-local/
+# private notes escape hatch (README documents the convention in clones)
+local/*
+!local/README.md
+
+# interrupted bun-compile intermediates
+*.bun-build
