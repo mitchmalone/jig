@@ -51,6 +51,7 @@ Formatting is Prettier's job. Don't fight the formatter; always ship formatted c
 - **Next.js, static-first**, for marketing/public sites (`apps/www`). Prerender everything; step up to dynamic rendering only when the site genuinely needs it, recorded as a deviation.
 - **Vite + React + shadcn** for product web apps. Apps with an admin panel start from [shadcn-admin](https://github.com/satnaing/shadcn-admin) — prune upstream cruft (its changelog, license, deploy configs) on adoption; it lints itself with its own config.
 - **Hono** for APIs, with Zod contracts as the seam.
+- **Neon Postgres, via the Vercel Marketplace integration**, whenever a database is needed. Default region `aws-ap-southeast-2` (Sydney) — a locality default, not an architectural one; change it per project freely, no deviation entry needed.
 - **Better Auth** for authentication — always. Auth lives server-side in the API app; the browser sees only same-origin cookies.
 - **Tailwind CSS** for styling.
 - **Vanilla Node** for scripts and automation. Don't reach for a framework when a script will do.

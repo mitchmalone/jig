@@ -2,6 +2,10 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-08-14 — Neon is the default database, managed via Vercel
+
+When a project needs a database, it uses Neon Postgres provisioned through the Vercel Marketplace integration, not a self-managed Postgres or another provider. Context: the standard previously prescribed no database at all, leaving each project to improvise. Reasoning: the Vercel integration keeps billing, env injection, and preview-branch databases inside the existing two-projects-per-product deploy topology with zero extra credentials to manage, and Neon's branching maps cleanly onto preview deploys. Region defaults to `aws-ap-southeast-2` (Sydney) — that's a personal locality default, not an architectural choice; adopters of the standard change the region per project freely, no deviation entry required.
+
 ## 2026-08-12 — The jig is a stamp, not a runtime dependency
 
 Every stamp vendors the full standard into the project (`docs/STANDARDS.md`); the in-repo copy governs thereafter, and no file inside or outside a project points at the jig repo as live authority. The machine-global AGENTS.md carries personal context only, zero standards authority. Reasoning: a live reference is redundant next to the vendored copy, can fight a project's legitimate deviations as the jig evolves, and leaks jig rules into repos that follow other conventions (forks, team projects). Jig updates reach projects only through deliberate reconciliation.
