@@ -2,6 +2,10 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-08-14 — Infisical is the env/secret source for every tier
+
+The standard's per-app dotenv scheme (`.env.<app>.example` committed, `.env.<app>.local` gitignored, `infra` reserved scope for operator creds) is replaced by Infisical: one workspace per project, `.infisical.json` committed (pointer only), direnv + Infisical CLI injecting the dev shell, deploy platforms fed by integration or synced export. No real env value lives on disk, gitignored or not; `env.ts` (Zod-parsed) is the manifest of what an app needs, superseding `.example` files. Context: triviabard hit the old standard's own reconvergence trigger ("prefer a secret manager; in-tree prod creds are a recorded deviation") and Mitch ruled the fix should be the standard, not a per-project deviation. Reasoning: gitignored real values are one `git add -f` or one stolen laptop from disaster, `.example` files drift from the Zod manifest that actually gates startup, and a secret manager makes the operator-credential story identical to the app-env story instead of a special case. Templates still ship `_env.api.example` — reconcile the flavor templates to ship `.infisical.json` placeholders + an `.envrc` recipe when the next project is stamped (trigger, not date).
+
 ## 2026-08-14 — Neon is the default database, managed via Vercel
 
 When a project needs a database, it uses Neon Postgres provisioned through the Vercel Marketplace integration, not a self-managed Postgres or another provider. Context: the standard previously prescribed no database at all, leaving each project to improvise. Reasoning: the Vercel integration keeps billing, env injection, and preview-branch databases inside the existing two-projects-per-product deploy topology with zero extra credentials to manage, and Neon's branching maps cleanly onto preview deploys. Region defaults to `aws-ap-southeast-2` (Sydney) — that's a personal locality default, not an architectural choice; adopters of the standard change the region per project freely, no deviation entry required.

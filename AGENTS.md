@@ -84,9 +84,10 @@ Every repo has a single **`verify`** command = typecheck + lint + test (plus pro
 
 ## Environment & Configuration
 
-- Env vars for anything that changes between environments; validate at startup (Zod-parsed `src/env.ts`), no raw `process.env` elsewhere.
-- Per-app, root-level convention: `.env.<app>.example` **committed** with commented required/optional blocks; `.env.<app>.local` and other tiers **gitignored**. Templates ship `.example` files only — never a real secret in the tree.
-- **`infra` is a reserved app-scope** (`.env.infra.<tier>`) for operator credentials used from a local machine (prod DB passwords, deploy secrets). Prefer a secret manager; keeping prod-tier creds in-tree (gitignored) is a recorded deviation with a reconvergence trigger.
+- Env vars for anything that changes between environments; validate at startup (Zod-parsed `src/env.ts`), no raw `process.env` elsewhere. `env.ts` is the manifest of what an app needs — the single source of truth, not an `.example` file.
+- **Infisical is the env/secret source for every tier** — dev, prod, and operator credentials alike. One workspace per project; `.infisical.json` (workspace pointer, no secret material) is **committed**. Locally, direnv (`.envrc`, gitignored, per-machine) injects the dev environment into the shell via the Infisical CLI (`infisical login` once per machine). Deploy platforms get prod values through the Infisical integration or a synced export.
+- **No real env value ever lives on disk** — not even gitignored. A `.env.*` file holding a real value is a migration not yet finished. Dotenv fallbacks in code are acceptable for offline work only; a shell-injected value always wins (dotenv never overrides).
+- Operator credentials (prod DB passwords, deploy tokens, DNS keys) live in the workspace's prod environment and reach a local machine only through the CLI at time of use — never a `.env.infra.*` file.
 - Local services bind **project-unique ports** (offset the default range per project) so multiple stacks coexist on one machine; record the ports in the project `AGENTS.md`.
 
 ## Git & Commits
