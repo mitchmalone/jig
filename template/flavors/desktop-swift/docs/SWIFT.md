@@ -12,3 +12,4 @@ The jig standard's TypeScript sections don't apply to Swift code; these do.
 - Minimum deployment target is declared once, in `project.yml` and `Package.swift`; keep them equal.
 - Signing is environment-driven (`DEVELOPMENT_TEAM` from `.envrc`). Unset means an unsigned build — that's the CI path, and it must always work.
 - Performance budgets, if the product has them, are requirements — put the table in `AGENTS.md` and test against it.
+- **Make the app driveable without a display.** Debug-only environment hooks pay for themselves on the first locked-screen session: an isolated profile (`<APP>_PROFILE=name`, `<APP>_RESET=1`), a self-render snapshot of the main window into the sandbox tmp dir, and an in-process end-to-end self-test that drives the real model and views, prints `PASS`/`FAIL` lines to stderr and exits non-zero. Wire the self-test into `verify`. Synthesized clicks (XCUITest) need an unlocked session; these don't.
