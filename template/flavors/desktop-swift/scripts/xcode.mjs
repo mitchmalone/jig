@@ -31,7 +31,7 @@ function build() {
     ? `DEVELOPMENT_TEAM=${team} -allowProvisioningUpdates`
     : 'CODE_SIGNING_ALLOWED=NO'
   sh(
-    `xcodebuild -project "${project}" -scheme ${PROJECT} -configuration Debug -destination platform=macOS ` +
+    `xcodebuild -project "${project}" -scheme ${PROJECT} -configuration Debug -destination generic/platform=macOS ` +
       `-derivedDataPath "${DERIVED}" ${signing} -quiet build`,
   )
 }
