@@ -10,7 +10,7 @@
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
     "generate": "node scripts/xcode.mjs generate",
     "build": "node scripts/xcode.mjs build",
-    "run": "node scripts/xcode.mjs run",
+    "start": "node scripts/xcode.mjs run",
     "xcode": "node scripts/xcode.mjs open",
     "test": "for p in packages/*/; do swift test --package-path \"$p\" || exit 1; done",
     "lint": "xcrun swift-format lint --strict --recursive apps packages",

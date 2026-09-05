@@ -2,6 +2,7 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-09-05 — A package.json script named `run` is unreachable via `pnpm run` (that lists scripts) — name the launch script `start`.
 - 2026-09-05 — XcodeGen leaves `${DEVELOPMENT_TEAM}` literally in the pbxproj when the env var is unset (expands only when set) — harmless for `CODE_SIGNING_ALLOWED=NO` builds; set it in `.envrc` before opening Xcode.
 - 2026-09-05 — swift-format `OrderedImports` fails a stamped `import SwiftUI` / `import <Name>Core` pair depending on the project name — the generator formats Swift stamps instead of hand-sorting template imports.
 - 2026-09-05 — pnpm 11 needs `allowBuilds: lefthook: true` in `pnpm-workspace.yaml` even in a repo with no JS workspaces — a config-only workspace file (no `packages:`) is valid and is what the Swift flavor ships.
