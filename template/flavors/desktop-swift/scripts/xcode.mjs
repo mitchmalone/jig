@@ -21,11 +21,12 @@ function fail(message) {
 const sh = (cmd, opts = {}) => execSync(cmd, { stdio: 'inherit', ...opts })
 
 function generate() {
-  sh('xcodegen generate --quiet', { cwd: APP_DIR })
+  // --use-cache: a no-op unless project.yml or the source tree changed.
+  sh('xcodegen generate --quiet --use-cache', { cwd: APP_DIR })
 }
 
 function build() {
-  if (!existsSync(project)) generate()
+  generate()
   const team = process.env.DEVELOPMENT_TEAM
   const signing = team
     ? `DEVELOPMENT_TEAM=${team} -allowProvisioningUpdates`

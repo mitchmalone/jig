@@ -2,6 +2,10 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-09-05 — Swift: a `RawRepresentable` ID over `UUID` gets memberwise Codable (`{"rawValue": …}`), not single-value — Swift only synthesises the single-value form for primitive raw values; write `init(from:)`/`encode(to:)` by hand (Fenestre's `SingleValueCodable`).
+- 2026-09-05 — Swift: `NSImage.lockFocus` renders at the screen scale, so a "1024px" icon comes out 2048px on Retina — draw into an explicit `NSBitmapImageRep`. And an asset catalog needs a root `Contents.json` or `actool` compiles nothing, silently.
+- 2026-09-05 — Sandboxed macOS apps can't write to a path outside their container; debug outputs go to `FileManager.temporaryDirectory` (`~/Library/Containers/<id>/Data/tmp`). `screencapture` is black on a locked display; have the app snapshot its own window instead.
+- 2026-09-05 — `xcodebuild` used a stale file list because the wrapper only generated the project when missing — always `xcodegen generate --use-cache` before building; it's a no-op when nothing changed.
 - 2026-09-05 — A package.json script named `run` is unreachable via `pnpm run` (that lists scripts) — name the launch script `start`.
 - 2026-09-05 — XcodeGen leaves `${DEVELOPMENT_TEAM}` literally in the pbxproj when the env var is unset (expands only when set) — harmless for `CODE_SIGNING_ALLOWED=NO` builds; set it in `.envrc` before opening Xcode.
 - 2026-09-05 — swift-format `OrderedImports` fails a stamped `import SwiftUI` / `import <Name>Core` pair depending on the project name — the generator formats Swift stamps instead of hand-sorting template imports.
