@@ -16,7 +16,7 @@ Rules resolve in three tiers inside the repo, most specific wins:
 
 ## Language & Runtime
 
-- **TypeScript** for all application code. JavaScript (`.mjs`) is acceptable for lightweight zero-dependency scripts.
+- **TypeScript** for all application code. JavaScript (`.mjs`) is acceptable for lightweight zero-dependency scripts. **Swift** is the one other application language, for Apple-native apps only (`desktop-swift` flavor); its delta lives in the stamped `docs/SWIFT.md`.
 - **ESM only.** `"type": "module"` in every `package.json`. No CommonJS.
 - **Node, current LTS.** Target **ES2022+** in `tsconfig.json`.
 - **Bun is a scoped exception**: allowed only when a deliverable is a compiled single-file binary (`bun build --compile`). A repo containing *any* compiled-binary deliverable is a Bun repo: Bun for everything — workspaces, install, test, and its other apps (Hono and Next run fine under Bun) — one toolchain per repo, no hybrids. Record the choice in `DEVIATIONS.md`.
@@ -51,6 +51,7 @@ Formatting is Prettier's job. Don't fight the formatter; always ship formatted c
 - **Next.js, static-first**, for marketing/public sites (`apps/www`). Prerender everything; step up to dynamic rendering only when the site genuinely needs it, recorded as a deviation.
 - **Vite + React + shadcn** for product web apps. Apps with an admin panel start from [shadcn-admin](https://github.com/satnaing/shadcn-admin) — prune upstream cruft (its changelog, license, deploy configs) on adoption; it lints itself with its own config.
 - **Hono** for APIs, with Zod contracts as the seam.
+- **SwiftUI, native, for Apple-only apps** — products whose value is platform features (iCloud/CloudKit, sandbox, WebKit data stores, Keychain). Pure SwiftPM packages hold the logic; the app target is composition. Tauri remains the choice when the desktop app must be cross-platform.
 - **Neon Postgres, via the Vercel Marketplace integration**, whenever a database is needed. Default region `aws-ap-southeast-2` (Sydney) — a locality default, not an architectural one; change it per project freely, no deviation entry needed.
 - **Better Auth** for authentication — always. Auth lives server-side in the API app; the browser sees only same-origin cookies.
 - **Tailwind CSS** for styling.
@@ -64,7 +65,7 @@ All code changes follow **TDD**. Not optional.
 2. **Green** — write the minimum code to pass. Resist building ahead.
 3. **Refactor** — clean up with tests green.
 
-- **Vitest** (or `bun test` in Bun projects). Test files: `*.test.ts`.
+- **Vitest** (or `bun test` in Bun projects; Swift Testing via `swift test` in Swift packages). Test files: `*.test.ts`.
 - Test behavior, not implementation — tests should survive refactoring.
 - Descriptive names: `it('returns null when user is not found')`.
 - Don't mock what you don't own; wrap the dependency and mock the wrapper.

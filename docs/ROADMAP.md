@@ -8,6 +8,8 @@ Docs skeleton, canonical `AGENTS.md`, base template, core flavors, ci/public lay
 
 ## Backlog (deferred, with triggers)
 
+- **Swift release pipeline** (archive, notarize, DMG/zip, tag-triggered fan-out to the shared tap as a cask) — trigger: first Swift project ships. Build in-project first, upstream what proves out.
+- **iPadOS destination in `desktop-swift`** as a documented one-line spec change with a CI matrix entry — trigger: first Swift project targets iPad.
 - **Expo/EAS mobile flavor** — trigger: next mobile project. (Known already: `nodeLinker: hoisted` in pnpm-workspace.yaml — isolated layout breaks Metro/RN codegen.)
 - **`daemon-bun` flavor** (long-running background service: launchd plist + systemd unit templates, install/uninstall scripts, offline event spool, darwin-arm64 + linux-arm64 compile matrix in the release workflow) — trigger: the fleet-monitor project's daemon stabilizes, or a second project needs a background service. Build in-project first, upstream what proves out.
 - **`+collab` layer** (CODEOWNERS, PR template, branch protection, fence script) — trigger: a second contributor on any jig project.

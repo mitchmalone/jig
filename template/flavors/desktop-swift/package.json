@@ -1,0 +1,28 @@
+{
+  "name": "{{PROJECT_NAME}}",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
+    "generate": "node scripts/xcode.mjs generate",
+    "build": "node scripts/xcode.mjs build",
+    "run": "node scripts/xcode.mjs run",
+    "xcode": "node scripts/xcode.mjs open",
+    "test": "for p in packages/*/; do swift test --package-path \"$p\" || exit 1; done",
+    "lint": "xcrun swift-format lint --strict --recursive apps packages",
+    "format": "xcrun swift-format format -i --recursive apps packages && prettier --write .",
+    "format:check": "xcrun swift-format lint --strict --recursive apps packages && prettier --check .",
+    "verify": "pnpm format:check && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "lefthook": "^2.1.10",
+    "prettier": "^3.9.6"
+  }
+}

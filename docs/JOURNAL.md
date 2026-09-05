@@ -2,6 +2,10 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-09-05 — XcodeGen leaves `${DEVELOPMENT_TEAM}` literally in the pbxproj when the env var is unset (expands only when set) — harmless for `CODE_SIGNING_ALLOWED=NO` builds; set it in `.envrc` before opening Xcode.
+- 2026-09-05 — swift-format `OrderedImports` fails a stamped `import SwiftUI` / `import <Name>Core` pair depending on the project name — the generator formats Swift stamps instead of hand-sorting template imports.
+- 2026-09-05 — pnpm 11 needs `allowBuilds: lefthook: true` in `pnpm-workspace.yaml` even in a repo with no JS workspaces — a config-only workspace file (no `packages:`) is valid and is what the Swift flavor ships.
+- 2026-09-05 — CI-variant picker renamed `verify-swift.yml` to `verify.yml` and then deleted it as the stale pnpm variant — `readdirSync` was snapshotted before the rename; delete losers first, rename last.
 - 2026-08-12 — pnpm doesn't auto-run npm-style `pre*` scripts — Vercel/CI builds silently skip `prebuild` content-fetch steps; inline them into `dev`/`build` when migrating.
 - 2026-08-12 — `next lint` only covers app/components/pages/lib/src — switching the gate to `eslint .` surfaces a hidden backlog (stories/, templates/, root configs); budget for it.
 - 2026-08-12 — eslint-config-next ≥16.3 enables React-compiler-based react-hooks rules — dozens of real-but-refactor-risky findings in legacy components; defer with a DEVIATIONS entry rather than folding into a migration.

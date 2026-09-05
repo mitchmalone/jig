@@ -3,7 +3,7 @@
 //
 //   node scripts/new-project.mjs --name my-thing [--dir path] \
 //     [--flavors www-next,api-hono] [--layers ci,public] \
-//     [--author "Name"] [--no-git] [--verify]
+//     [--author "Name"] [--bundle-id com.example.my-thing] [--no-git] [--verify]
 //
 // Compose order: base → flavors → layers (later files overwrite earlier).
 // Zero dependencies; bare Node.
@@ -41,6 +41,7 @@ function parseArgs(argv) {
     else if (arg === '--layers')
       args.layers = argv[++i].split(',').filter(Boolean)
     else if (arg === '--author') args.author = argv[++i]
+    else if (arg === '--bundle-id') args.bundleId = argv[++i]
     else if (arg === '--no-git') args.git = false
     else if (arg === '--verify') args.verify = true
     else fail(`unknown argument: ${arg}`)
@@ -82,7 +83,24 @@ const author =
     }
   })()
 
-const isBun = args.flavors.includes('tui-bun')
+// Swift module names and Xcode targets need PascalCase: my-thing → MyThing.
+const pascalName = args.name
+  .split('-')
+  .map((part) => part[0].toUpperCase() + part.slice(1))
+  .join('')
+const bundleId = args.bundleId ?? `com.example.${args.name}`
+if (!/^[A-Za-z0-9.-]+\.[A-Za-z0-9-]+$/.test(bundleId))
+  fail('--bundle-id must be reverse-DNS, e.g. com.example.my-thing')
+const bundleIdPrefix = bundleId.slice(0, bundleId.lastIndexOf('.'))
+
+// One toolchain per repo. Flavors that swap it are named here; the CI layer
+// ships one `verify-<toolchain>.yml` per entry (`verify.yml` is pnpm's).
+const toolchain = args.flavors.includes('tui-bun')
+  ? 'bun'
+  : args.flavors.includes('desktop-swift')
+    ? 'swift'
+    : 'pnpm'
+const pm = toolchain === 'bun' ? 'bun' : 'pnpm'
 
 // --- compose ---------------------------------------------------------------
 
@@ -114,10 +132,27 @@ function walk(dir, visit) {
   }
 }
 
-// 1. `_name` → `.name` (deepest first so parent renames don't orphan paths)
+const substitutions = [
+  ['{{PROJECT_NAME}}', args.name],
+  ['{{PROJECT_PASCAL}}', pascalName],
+  ['{{BUNDLE_ID_PREFIX}}', bundleIdPrefix],
+  ['{{BUNDLE_ID}}', bundleId],
+  ['{{AUTHOR}}', author],
+  ['{{YEAR}}', String(new Date().getFullYear())],
+]
+const substitute = (text) =>
+  substitutions.reduce(
+    (acc, [token, value]) => acc.replaceAll(token, value),
+    text,
+  )
+
+// 1. Path fixups, deepest first so parent renames don't orphan children:
+//    `_name` → `.name`, and `{{TOKEN}}` in file/directory names.
+const isDotfileAlias = (name) =>
+  name.startsWith('_') && !renameExceptions.has(name)
 const renames = []
 walk(target, (path, entry) => {
-  if (entry.name.startsWith('_') && !renameExceptions.has(entry.name))
+  if (isDotfileAlias(entry.name) || entry.name.includes('{{'))
     renames.push(path)
 })
 renames
@@ -125,19 +160,37 @@ renames
   .forEach((path) => {
     const dir = dirname(path)
     const name = path.slice(dir.length + 1)
-    renameSync(path, join(dir, `.${name.slice(1)}`))
+    const renamed = isDotfileAlias(name)
+      ? `.${name.slice(1)}`
+      : substitute(name)
+    renameSync(path, join(dir, renamed))
   })
 
 // 2. Toolchain-dependent CI workflow: keep the matching variant.
 const workflows = join(target, '.github', 'workflows')
-const bunVariant = join(workflows, 'verify-bun.yml')
-if (existsSync(bunVariant)) {
-  if (isBun) renameSync(bunVariant, join(workflows, 'verify.yml'))
-  else rmSync(bunVariant)
+if (existsSync(workflows)) {
+  const wanted =
+    toolchain === 'pnpm' ? 'verify.yml' : `verify-${toolchain}.yml`
+  const variants = readdirSync(workflows).filter((file) =>
+    /^verify(-[a-z]+)?\.yml$/.test(file),
+  )
+  if (!variants.includes(wanted))
+    fail(`ci layer has no workflow for the ${toolchain} toolchain`)
+  // Delete the losers before renaming the winner, or `verify.yml` gets
+  // renamed over and then removed as the stale pnpm variant.
+  for (const file of variants)
+    if (file !== wanted) rmSync(join(workflows, file))
+  renameSync(join(workflows, wanted), join(workflows, 'verify.yml'))
 }
 
-// 3. Bun repos have no pnpm workspace file.
-if (isBun) rmSync(join(target, 'pnpm-workspace.yaml'), { force: true })
+// 3. Toolchain swaps drop the base files that no longer apply.
+const dropped = {
+  pnpm: [],
+  bun: ['pnpm-workspace.yaml'],
+  swift: ['tsconfig.base.json', 'eslint.config.js'],
+}
+for (const file of dropped[toolchain])
+  rmSync(join(target, file), { force: true })
 
 // 4. Every stamp vendors the standard — the jig is a stamp, not a runtime
 // dependency; the in-repo copy governs from here on.
@@ -148,25 +201,23 @@ if (isBun) rmSync(join(target, 'pnpm-workspace.yaml'), { force: true })
   writeFileSync(join(target, 'docs', 'STANDARDS.md'), stamp + standard)
 }
 
-// 5. Placeholder substitution.
-const substitutions = [
-  ['{{PROJECT_NAME}}', args.name],
-  ['{{AUTHOR}}', author],
-  ['{{YEAR}}', String(new Date().getFullYear())],
-]
+// 5. Placeholder substitution in file contents.
 walk(target, (path, entry) => {
   if (!entry.isFile()) return
   if (statSync(path).size > 512 * 1024) return
   const content = readFileSync(path, 'utf8')
-  let replaced = content
-  for (const [token, value] of substitutions)
-    replaced = replaced.replaceAll(token, value)
+  const replaced = substitute(content)
   if (replaced !== content) writeFileSync(path, replaced)
 })
 
 // --- git + verify ----------------------------------------------------------
 
 const run = (cmd) => execSync(cmd, { cwd: target, stdio: 'inherit' })
+
+// 6. Swift import order depends on the project name (`<Name>Core` sorts
+// either side of `SwiftUI`), so the stamp is formatted, not hand-sorted.
+if (toolchain === 'swift')
+  run('xcrun swift-format format -i --recursive apps packages')
 
 if (args.git) {
   run('git init -q -b main')
@@ -175,16 +226,17 @@ if (args.git) {
 }
 
 if (args.verify) {
-  run(isBun ? 'bun install' : 'pnpm install')
-  run(isBun ? 'bun run verify' : 'pnpm verify')
+  if (toolchain === 'swift') run('brew bundle --no-upgrade')
+  run(`${pm} install`)
+  run(`${pm} run verify`)
 }
 
 console.log(`\nstamped ${args.name} at ${target}`)
 console.log(`  flavors: ${args.flavors.join(', ') || '(none)'}`)
 console.log(`  layers:  ${args.layers.join(', ') || '(none)'}`)
 console.log(`\nnext steps:`)
-console.log(
-  `  1. ${isBun ? 'bun' : 'pnpm'} install   # also installs git hooks`,
-)
+if (toolchain === 'swift')
+  console.log(`  0. brew bundle   # XcodeGen; swift-format ships with Xcode`)
+console.log(`  1. ${pm} install   # also installs git hooks`)
 console.log(`  2. fill in AGENTS.md (identity, stack, invariants)`)
 console.log(`  3. write your first plan in docs/plans/active/`)

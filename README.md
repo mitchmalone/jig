@@ -14,9 +14,9 @@ node scripts/new-project.mjs --name my-thing \
 
 Compose order: `base` → flavors → layers (later files win). The stamp ends with a git repo whose `verify` gate (typecheck + lint + format check + test) passes after install.
 
-- **Flavors** — `www-next` (static-first marketing site), `api-hono` (+ Zod contracts and db seed packages), `web-vite` (product web app), `tui-bun` (Bun toolchain swap for compiled-binary CLIs/TUIs), `desktop-tauri` (Rust standards delta; scaffold the app from upstream).
+- **Flavors** — `www-next` (static-first marketing site), `api-hono` (+ Zod contracts and db seed packages), `web-vite` (product web app), `tui-bun` (Bun toolchain swap for compiled-binary CLIs/TUIs), `desktop-tauri` (Rust standards delta; scaffold the app from upstream), `desktop-swift` (native Apple app: pure SwiftPM packages + XcodeGen-described SwiftUI app, Swift Testing, swift-format).
 - **Layers** — `ci` (GitHub Actions running the same verify gate as the pre-push hook), `public` (LICENSE, CONTRIBUTING, issue templates, gitleaks, vendored standard, tag-triggered release fan-out to generated satellite repos).
-- Flags: `--dir`, `--author`, `--no-git`, `--verify` (install + run the gate immediately).
+- Flags: `--dir`, `--author`, `--bundle-id` (Swift apps), `--no-git`, `--verify` (install + run the gate immediately).
 
 ## What lives here
 
