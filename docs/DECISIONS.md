@@ -2,6 +2,10 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-09-05 — Swift repos have no CI verify job; runners are for releases only
+
+The `ci` layer refuses to compose with `desktop-swift`. The pre-push hook on the developer's Mac is the gate; GitHub macOS runners are used only for tag-triggered release builds. Context: the flavor initially shipped a macOS `verify` workflow. Reasoning (Mitch): the code is already built and verified on a Mac before every push, so a runner re-doing it buys nothing and macOS minutes bill at 10× Linux on private repos. Reconverge trigger: a second contributor on a Swift project, where "green on my Mac" stops being a shared fact.
+
 ## 2026-09-05 — Native Swift is the Apple-only app stack; the pnpm root stays as the gate runner
 
 Apple-only apps (macOS/iPadOS) are written in Swift via the `desktop-swift` flavor: pure SwiftPM packages under `packages/*` hold all logic and tests (`swift test`, no Xcode, no signing), a thin SwiftUI target under `apps/app` is described by an XcodeGen `project.yml`, and the `.xcodeproj` is generated and gitignored. Swift 6 language mode, complete concurrency checking, Swift Testing, and Xcode-bundled `swift-format`. The pnpm root survives purely to run the gate (lefthook, commitlint, prettier for docs); TypeScript tooling is stripped. Signing is environment-driven (`DEVELOPMENT_TEAM` via `.envrc`), so an unset team yields an unsigned build and CI/fresh clones always verify. Context: Fenestre needs CloudKit, app sandbox, and per-workspace WebKit data stores, which a Tauri shell reaches only through plugins and a Rust bridge. Reasoning: the jig bar is hackable and agent-friendly — every artefact is a text file an agent can edit and every step runs from the shell; XcodeGen and SwiftPM make that true where a raw `.pbxproj` would not. Tauri stays the cross-platform desktop choice. Rejected: Tuist (heavier, its own DSL and cache), SwiftLint (a second tool where swift-format already lints), dropping the pnpm root (commitlint has no non-npm equivalent and the docs formatter would go with it).

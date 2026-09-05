@@ -102,6 +102,11 @@ const toolchain = args.flavors.includes('tui-bun')
     : 'pnpm'
 const pm = toolchain === 'bun' ? 'bun' : 'pnpm'
 
+// Swift repos verify on the developer.s Mac via the pre-push hook; macOS runners
+// are reserved for release builds (2026-09-05 decision).
+if (toolchain === 'swift' && args.layers.includes('ci'))
+  fail('the ci layer does not apply to desktop-swift — the pre-push hook is the gate; runners are for releases')
+
 // --- compose ---------------------------------------------------------------
 
 const skipNames = new Set(['FLAVOR.md', 'LAYER.md'])

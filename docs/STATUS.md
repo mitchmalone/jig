@@ -4,7 +4,7 @@ The cursor. Done / in progress / next / blocked. Keep it short.
 
 ## Done
 
-- `desktop-swift` flavor (2026-09-05): native Apple apps — pnpm root as gate runner, XcodeGen `project.yml`, pure SwiftPM `packages/*` with Swift Testing, swift-format, env-driven signing, macOS CI variant. Smoke stamp passes `verify`. Generator grew `{{PROJECT_PASCAL}}`, `{{BUNDLE_ID}}`/`--bundle-id`, token substitution in paths, and a toolchain-keyed CI-variant picker.
+- `desktop-swift` flavor (2026-09-05): native Apple apps — pnpm root as gate runner, XcodeGen `project.yml`, pure SwiftPM `packages/*` with Swift Testing, swift-format, env-driven signing. No CI verify job for Swift repos — pre-push hook is the gate, runners for releases only. Smoke stamp passes `verify`. Generator grew `{{PROJECT_PASCAL}}`, `{{BUNDLE_ID}}`/`--bundle-id`, token substitution in paths, and a toolchain-keyed CI-variant picker.
 - Canonical `AGENTS.md` (self-contained, public), docs system, founding decisions.
 - Env/secrets standard replaced: Infisical for every tier — workspace pointer committed, direnv + CLI for dev, no real value on disk (2026-08-14 decision, driven by triviabard's reconvergence).
 - Database default decided: Neon via Vercel Marketplace, region a swappable locality default (2026-08-14 decision).

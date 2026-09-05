@@ -6,4 +6,4 @@ The pnpm root is kept purely as the gate runner (lefthook, commitlint, prettier 
 
 Prerequisites: Xcode (swift-format ships with it) and `brew bundle` for XcodeGen. Signing is environment-driven: `export DEVELOPMENT_TEAM=XXXXXXXXXX` in a gitignored `.envrc` (direnv) signs local builds automatically; without it the build is unsigned, which is what CI does.
 
-Does not compose with `tui-bun` (Bun toolchain swap) — one toolchain per repo. Composing with `public` overwrites `lefthook.yml` with the pnpm+gitleaks variant; re-add the `swift-format` pre-commit command from this flavor.
+Does not compose with the `ci` layer (the pre-push hook is the gate; macOS runners are for releases only) or with `tui-bun` (Bun toolchain swap) — one toolchain per repo. Composing with `public` overwrites `lefthook.yml` with the pnpm+gitleaks variant; re-add the `swift-format` pre-commit command from this flavor.

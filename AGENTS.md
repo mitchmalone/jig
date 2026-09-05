@@ -119,7 +119,7 @@ Every repo has a single **`verify`** command = typecheck + lint + test (plus pro
 
 ## CI/CD
 
-- CI runs the same `verify` gate as the pre-push hook. Green hooks, green CI — no drift between them.
+- CI runs the same `verify` gate as the pre-push hook. Green hooks, green CI — no drift between them. **Swift repos are the exception:** the pre-push hook on the developer's Mac is the gate; macOS runners are used only for release builds.
 - **Deploy topology: one Vercel project per framework surface, two per product.** `www` (static Next) and the app project (Vite build + the Hono API as serverless functions in the same project — genuinely same-origin `/api/*`, no cross-project rewrites). Don't give the API its own project. Each project sets an Ignored Build Step so it only builds when its app changed.
 - **After pushing, check the run.** Don't assume it passed. Fix red builds before moving on.
 - Releases are tag-triggered: notes written first from a template, then tag → build → publish → fan-out jobs push to generated satellites, each no-oping honestly when unconfigured.
