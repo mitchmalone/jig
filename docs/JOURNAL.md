@@ -2,6 +2,7 @@
 
 Append-only, newest first. 1–2 lines per entry: symptom → cause → fix.
 
+- 2026-09-05 — Restricted entitlements (iCloud/CloudKit, push) need a provisioning profile even for local Mac builds, and automatic signing can only mint one with an Apple ID signed in to Xcode → `xcodebuild -allowProvisioningUpdates` fails with `No Accounts` on a fresh machine. Keep such entitlements in a second committed `.entitlements` file selected by an env var so the default build stays green; guard the runtime with `SecTaskCopyValueForEntitlement` so an unprovisioned build degrades instead of trapping in `CKContainer`.
 - 2026-09-05 — Swift: a `RawRepresentable` ID over `UUID` gets memberwise Codable (`{"rawValue": …}`), not single-value — Swift only synthesises the single-value form for primitive raw values; write `init(from:)`/`encode(to:)` by hand (Fenestre's `SingleValueCodable`).
 - 2026-09-05 — Swift: `NSImage.lockFocus` renders at the screen scale, so a "1024px" icon comes out 2048px on Retina — draw into an explicit `NSBitmapImageRep`. And an asset catalog needs a root `Contents.json` or `actool` compiles nothing, silently.
 - 2026-09-05 — Sandboxed macOS apps can't write to a path outside their container; debug outputs go to `FileManager.temporaryDirectory` (`~/Library/Containers/<id>/Data/tmp`). `screencapture` is black on a locked display; have the app snapshot its own window instead.
