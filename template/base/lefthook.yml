@@ -1,3 +1,7 @@
+# Layers add hooks as fragments under .lefthook/ (e.g. gitleaks from +public).
+extends:
+  - .lefthook/*.yml
+
 pre-commit:
   parallel: true
   commands:
