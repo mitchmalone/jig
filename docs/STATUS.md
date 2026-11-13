@@ -21,7 +21,6 @@ The cursor. Done / in progress / next / blocked. Keep it short.
 
 ## Next
 
-- Push `fix/stamp-rot` and confirm the jig's first CI run is green — the workflow and the Actions major bumps are unproven until then.
 - First real deploy of a stamped web+api project: two things a local `vercel build` cannot prove — that per-service `ignoreCommand` skips as intended (it fails safe: an error builds), and that Vercel Services needs no opt-in on the account (the build output still labels it `experimentalServicesV2`). Journal what it shows.
 - Audit the standard for other prose-only rules: mark each clause stamped, gated, or prose, and close the ones worth closing (candidates: no raw `process.env` outside `env.ts` as a lint rule; project-unique ports).
 - Fleet reconciliation, on next touch of each stamped project: fix `{{ PROJECT_NAME }}` in `apps/web/src/app.tsx` / `apps/www/src/app/page.tsx` if still present, move gitleaks to `.lefthook/gitleaks.yml`, vendor `docs/STANDARDS.md` in private projects (2026-08-12 decision), replace `.env.*.example` with `.envrc.example`, and collapse any separate API Vercel project into the app project's `vercel.json` services.
