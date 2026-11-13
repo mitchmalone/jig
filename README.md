@@ -14,7 +14,7 @@ node scripts/new-project.mjs --name my-thing \
 
 Compose order: `base` → flavors → layers (later files win). The stamp ends with a git repo whose `verify` gate (typecheck + lint + format check + test) passes after install. The generator refuses to finish if any `{{PLACEHOLDER}}` survives substitution.
 
-- **Flavors** — `www-next` (static-first marketing site), `api-hono` (+ Zod contracts and db seed packages), `web-vite` (product web app), `tui-bun` (Bun toolchain swap for compiled-binary CLIs/TUIs), `desktop-tauri` (Rust standards delta; scaffold the app from upstream), `desktop-swift` (native Apple app: pure SwiftPM packages + XcodeGen-described SwiftUI app, Swift Testing, swift-format).
+- **Flavors** — `www-next` (static-first marketing site), `api-hono` (+ Zod contracts and db seed packages; with `web-vite`, deploys as one Vercel project via a root `vercel.json`), `web-vite` (product web app), `tui-bun` (Bun toolchain swap for compiled-binary CLIs/TUIs), `desktop-tauri` (Rust standards delta; scaffold the app from upstream), `desktop-swift` (native Apple app: pure SwiftPM packages + XcodeGen-described SwiftUI app, Swift Testing, swift-format).
 - **Layers** — `ci` (GitHub Actions running the same verify gate as the pre-push hook), `public` (LICENSE, CONTRIBUTING, issue templates, gitleaks as a lefthook fragment, tag-triggered release fan-out to generated satellite repos). `ci` does not apply to `desktop-swift`.
 - Flags: `--title` (human-facing name for headings and page titles; defaults to the kebab name in Title Case), `--dir`, `--author`, `--bundle-id` (Swift apps), `--no-git`, `--verify` (install + run the gate immediately).
 - Every stamp vendors the standard as `docs/STANDARDS.md` and ships an `.envrc.example` with the Infisical + direnv recipe.
@@ -27,7 +27,7 @@ pnpm test        # generator tests — fast, no network
 pnpm verify      # + stamp, install and verify the pnpm, Bun and Swift compositions
 ```
 
-`pnpm smoke pnpm` (or `bun`, `swift`) runs one composition. Template files are never formatted in place — they carry placeholders; formatting is checked in the stamp.
+`pnpm smoke pnpm` (or `bun`, `swift`) runs one composition; the pnpm one also runs an offline `vercel build` to prove the web + API one-project deploy. Template files are never formatted in place — they carry placeholders; formatting is checked in the stamp.
 
 ## What lives here
 

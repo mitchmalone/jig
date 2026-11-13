@@ -5,7 +5,7 @@
 //
 //   node scripts/smoke.mjs [pnpm|bun|swift ...]   # default: all available
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,10 +18,46 @@ const generator = join(
 const has = (command) =>
   spawnSync('sh', ['-c', `command -v ${command}`]).status === 0
 
+// Proves the deploy topology with a real, offline `vercel build`: a project
+// rooted at the repo must produce the web and api services, and a project
+// rooted at apps/www must build only the site. Project settings normally come
+// from `vercel pull`; a hand-written stand-in keeps this offline and unlinked.
+const VERCEL = 'npx -y vercel@65 build'
+function vercelBuild(dir, settings, expected) {
+  rmSync(join(dir, '.vercel'), { recursive: true, force: true })
+  mkdirSync(join(dir, '.vercel'))
+  writeFileSync(
+    join(dir, '.vercel', 'project.json'),
+    JSON.stringify({ projectId: 'prj_smoke', orgId: 'team_smoke', settings }),
+  )
+  const built =
+    spawnSync('sh', ['-c', VERCEL], {
+      cwd: dir,
+      stdio: 'inherit',
+      env: { ...process.env, VERCEL_TELEMETRY_DISABLED: '1' },
+    }).status === 0
+  const missing = expected.filter(
+    (path) => !existsSync(join(dir, '.vercel', 'output', path)),
+  )
+  for (const path of missing)
+    console.error(`error: vercel build did not produce ${path}`)
+  return built && missing.length === 0
+}
+
+const deployTopology = (dir) =>
+  vercelBuild(dir, {}, [
+    'services/web/static/index.html',
+    'services/api/functions/index.func',
+  ]) &&
+  vercelBuild(dir, { rootDirectory: 'apps/www', framework: 'nextjs' }, [
+    'static/index.html',
+  ])
+
 const compositions = {
   pnpm: {
     args: ['--flavors', 'www-next,api-hono,web-vite', '--layers', 'ci,public'],
     build: 'pnpm build',
+    after: deployTopology,
     unavailable: !has('pnpm') && 'pnpm not installed',
   },
   bun: {
@@ -50,7 +86,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'jig-smoke-'))
 const results = []
 
 for (const name of selected) {
-  const { args, build, unavailable } = compositions[name]
+  const { args, build, after, unavailable } = compositions[name]
   if (unavailable) {
     results.push([name, `skipped (${unavailable})`])
     continue
@@ -69,7 +105,8 @@ for (const name of selected) {
       '--verify',
       ...args,
     ]) &&
-    (!build || run('sh', ['-c', build], dir))
+    (!build || run('sh', ['-c', build], dir)) &&
+    (!after || after(dir))
   results.push([name, passed ? 'ok' : 'FAILED'])
 }
 

@@ -164,6 +164,38 @@ describe('composition', () => {
   })
 })
 
+describe('deploy topology', () => {
+  it('stamps web and api as services of one Vercel project', () => {
+    const dir = stampOk('my-thing', PNPM)
+    const config = JSON.parse(read(dir, 'vercel.json'))
+    assert.deepEqual(Object.keys(config.services).sort(), ['api', 'web'])
+    assert.equal(config.services.api.root, 'apps/api')
+    assert.ok(existsSync(join(dir, 'apps/api', config.services.api.entrypoint)))
+    assert.deepEqual(config.rewrites[0], {
+      source: '/api/(.*)',
+      destination: { service: 'api' },
+    })
+    assert.equal(existsSync(join(dir, 'apps/api/vercel.json')), false)
+    assert.ok(existsSync(join(dir, 'apps/api/src/deploy.test.ts')))
+  })
+
+  it('gives every Vercel build an ignore step', () => {
+    const dir = stampOk('my-thing', PNPM)
+    const app = JSON.parse(read(dir, 'vercel.json'))
+    for (const service of Object.values(app.services))
+      assert.match(service.ignoreCommand, /git diff --quiet/)
+    const www = JSON.parse(read(dir, 'apps/www/vercel.json'))
+    assert.match(www.ignoreCommand, /:\/apps\/www/)
+  })
+
+  it('leaves the deploy wiring out of an API-only stamp', () => {
+    const dir = stampOk('my-thing', ['--flavors', 'api-hono'])
+    assert.equal(existsSync(join(dir, 'vercel.json')), false)
+    assert.equal(existsSync(join(dir, 'apps/api/src/deploy.test.ts')), false)
+    assert.ok(existsSync(join(dir, 'apps/api/src/index.ts')))
+  })
+})
+
 describe('stamped docs and env', () => {
   it('names the gate with the pnpm toolchain', () => {
     const dir = stampOk('my-thing', PNPM)

@@ -160,6 +160,7 @@ const substitutions = [
   ['{{AUTHOR}}', author],
   ['{{YEAR}}', String(new Date().getFullYear())],
   ['{{PM}}', pm],
+  ['{{LOCKFILE}}', pm === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml'],
   ['{{PM_RUN}}', pm === 'bun' ? 'bun run' : 'pnpm'],
 ]
 const substitute = (text) =>
@@ -214,6 +215,13 @@ const dropped = {
 }
 for (const file of dropped[toolchain])
   rmSync(join(target, file), { force: true })
+
+// 3b. The one-project deploy wiring (root vercel.json with web + api services,
+// and the test that guards it) only makes sense when both halves are stamped.
+// An API-only product picks its own deploy and records it in DEVIATIONS.md.
+if (args.flavors.includes('api-hono') && !args.flavors.includes('web-vite'))
+  for (const file of ['vercel.json', 'apps/api/src/deploy.test.ts'])
+    rmSync(join(target, file), { force: true })
 
 // 4. Placeholder substitution in file contents.
 walk(target, (path, entry) => {

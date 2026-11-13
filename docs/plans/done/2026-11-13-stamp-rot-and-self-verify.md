@@ -29,6 +29,7 @@ Fix the hazard (no tokens in JSX expression position), make the generator fail o
 - [x] Naming: strict kebab validation, `--title` / `{{PROJECT_TITLE}}`.
 - [x] Tidy: Infisical recipe replaces `_env.api.example`, toolchain-aware commands in stamped docs, README.
 - [x] Dependency and Actions bumps, verified by smoke stamps.
+- [x] Deploy topology (added after review): web + api as Vercel Services in one project, stamped and gated.
 - [x] Docs close-out.
 
 ## Acceptance criteria
