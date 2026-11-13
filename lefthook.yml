@@ -1,0 +1,16 @@
+# No pre-commit formatter: template files carry {{PLACEHOLDERS}} and are
+# formatted in the stamp, not here (see docs/DECISIONS.md, 2026-11-13).
+pre-commit:
+  commands:
+    gitleaks:
+      run: gitleaks git --pre-commit --staged --redact --verbose
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm commitlint --edit {1}
+
+pre-push:
+  commands:
+    verify:
+      run: pnpm verify

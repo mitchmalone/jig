@@ -1,0 +1,4 @@
+# Copy to .envrc (gitignored, per-machine), then `direnv allow`.
+# Once per machine: `infisical login`. Once per project: `infisical init`,
+# which writes .infisical.json (workspace pointer, no secrets) — commit it.
+eval "$(infisical export --env=dev --format=dotenv-export)"

@@ -1,0 +1,3 @@
+# Config-only workspace: the jig has no packages, just a gate runner.
+allowBuilds:
+  lefthook: true

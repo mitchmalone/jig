@@ -4,8 +4,8 @@ import type { ReactNode } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '{{PROJECT_NAME}}',
-  description: '{{PROJECT_NAME}}',
+  title: '{{PROJECT_TITLE}}',
+  description: '{{PROJECT_TITLE}}',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

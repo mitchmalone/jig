@@ -1,8 +1,8 @@
-# AGENTS.md — {{PROJECT_NAME}}
+# AGENTS.md — {{PROJECT_TITLE}}
 
 <!-- One line: what this product is and who it's for. -->
 
-{{PROJECT_NAME}} is …
+{{PROJECT_TITLE}} is …
 
 ## Standard
 
@@ -44,13 +44,13 @@ placeholders remain. -->
 
 ## Commands
 
-| Command       | What                                             |
-| ------------- | ------------------------------------------------ |
-| `pnpm dev`    | Run all apps in parallel                         |
-| `pnpm verify` | The gate: typecheck + lint + format check + test |
+- `{{PM_RUN}} verify` — the gate. The pre-push hook and CI run exactly this.
+- Everything else is a script in the root `package.json`.
+
+<!-- Record project-unique local ports here (the standard requires them). -->
 
 ## Definition of done
 
-- `pnpm verify` green.
+- `{{PM_RUN}} verify` green.
 - New behavior has tests, written first (red/green/refactor).
 - `docs/STATUS.md` updated and the plan moved to `done/` in the same commit.

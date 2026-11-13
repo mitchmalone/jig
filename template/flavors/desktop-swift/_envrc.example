@@ -1,0 +1,9 @@
+# Copy to .envrc (gitignored, per-machine), then `direnv allow`.
+
+# Signs local builds; leave unset for an unsigned build.
+export DEVELOPMENT_TEAM=XXXXXXXXXX
+
+# Only if the app needs env/secrets. Once per machine: `infisical login`.
+# Once per project: `infisical init`, which writes .infisical.json
+# (workspace pointer, no secrets) — commit it.
+# eval "$(infisical export --env=dev --format=dotenv-export)"

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "apps/web",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':/apps/web' ':/packages' ':/{{LOCKFILE}}' ':/vercel.json'",
+      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+    },
+    "api": {
+      "root": "apps/api",
+      "entrypoint": "src/index.ts",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':/apps/api' ':/packages' ':/{{LOCKFILE}}' ':/vercel.json'"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ]
+}

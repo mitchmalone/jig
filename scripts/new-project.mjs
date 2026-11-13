@@ -3,7 +3,8 @@
 //
 //   node scripts/new-project.mjs --name my-thing [--dir path] \
 //     [--flavors www-next,api-hono] [--layers ci,public] \
-//     [--author "Name"] [--bundle-id com.example.my-thing] [--no-git] [--verify]
+//     [--title "My Thing"] [--author "Name"] \
+//     [--bundle-id com.example.my-thing] [--no-git] [--verify]
 //
 // Compose order: base → flavors → layers (later files overwrite earlier).
 // Zero dependencies; bare Node.
@@ -19,7 +20,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const jigRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -34,14 +35,16 @@ function parseArgs(argv) {
   const args = { flavors: [], layers: [], git: true, verify: false }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
-    if (arg === '--name') args.name = argv[++i]
-    else if (arg === '--dir') args.dir = argv[++i]
+    const value = () => argv[++i] ?? fail(`${arg} needs a value`)
+    if (arg === '--name') args.name = value()
+    else if (arg === '--title') args.title = value()
+    else if (arg === '--dir') args.dir = value()
     else if (arg === '--flavors')
-      args.flavors = argv[++i].split(',').filter(Boolean)
+      args.flavors = value().split(',').filter(Boolean)
     else if (arg === '--layers')
-      args.layers = argv[++i].split(',').filter(Boolean)
-    else if (arg === '--author') args.author = argv[++i]
-    else if (arg === '--bundle-id') args.bundleId = argv[++i]
+      args.layers = value().split(',').filter(Boolean)
+    else if (arg === '--author') args.author = value()
+    else if (arg === '--bundle-id') args.bundleId = value()
     else if (arg === '--no-git') args.git = false
     else if (arg === '--verify') args.verify = true
     else fail(`unknown argument: ${arg}`)
@@ -52,8 +55,20 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2))
 
 if (!args.name) fail('--name is required')
-if (!/^[a-z][a-z0-9-]*$/.test(args.name))
-  fail('--name must be kebab-case: lowercase letters, digits, hyphens')
+if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(args.name))
+  fail(
+    '--name must be kebab-case: lowercase letters and digits in single-hyphen-separated segments, starting with a letter',
+  )
+
+const capitalize = (part) => part[0].toUpperCase() + part.slice(1)
+const nameParts = args.name.split('-')
+
+// The human-facing name (page titles, headings, app display name). It lands
+// inside quoted strings, HTML and YAML, so anything that could close one of
+// those is refused rather than escaped per file type.
+const title = args.title ?? nameParts.map(capitalize).join(' ')
+if (!title.trim() || /['"`\\<>{}&\n]/.test(title))
+  fail('--title must not be empty or contain quotes, backslashes, <>, {} or &')
 
 const available = (kind) =>
   readdirSync(join(templateRoot, kind), { withFileTypes: true })
@@ -84,10 +99,7 @@ const author =
   })()
 
 // Swift module names and Xcode targets need PascalCase: my-thing → MyThing.
-const pascalName = args.name
-  .split('-')
-  .map((part) => part[0].toUpperCase() + part.slice(1))
-  .join('')
+const pascalName = nameParts.map(capitalize).join('')
 const bundleId = args.bundleId ?? `com.example.${args.name}`
 if (!/^[A-Za-z0-9.-]+\.[A-Za-z0-9-]+$/.test(bundleId))
   fail('--bundle-id must be reverse-DNS, e.g. com.example.my-thing')
@@ -105,7 +117,9 @@ const pm = toolchain === 'bun' ? 'bun' : 'pnpm'
 // Swift repos verify on the developer's Mac via the pre-push hook; macOS runners
 // are reserved for release builds (2026-09-05 decision).
 if (toolchain === 'swift' && args.layers.includes('ci'))
-  fail('the ci layer does not apply to desktop-swift — the pre-push hook is the gate; runners are for releases')
+  fail(
+    'the ci layer does not apply to desktop-swift — the pre-push hook is the gate; runners are for releases',
+  )
 
 // --- compose ---------------------------------------------------------------
 
@@ -139,11 +153,15 @@ function walk(dir, visit) {
 
 const substitutions = [
   ['{{PROJECT_NAME}}', args.name],
+  ['{{PROJECT_TITLE}}', title],
   ['{{PROJECT_PASCAL}}', pascalName],
   ['{{BUNDLE_ID_PREFIX}}', bundleIdPrefix],
   ['{{BUNDLE_ID}}', bundleId],
   ['{{AUTHOR}}', author],
   ['{{YEAR}}', String(new Date().getFullYear())],
+  ['{{PM}}', pm],
+  ['{{LOCKFILE}}', pm === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml'],
+  ['{{PM_RUN}}', pm === 'bun' ? 'bun run' : 'pnpm'],
 ]
 const substitute = (text) =>
   substitutions.reduce(
@@ -171,9 +189,10 @@ renames
     renameSync(path, join(dir, renamed))
   })
 
-// 2. Toolchain-dependent CI workflow: keep the matching variant.
+// 2. Toolchain-dependent CI workflow: keep the matching variant. Keyed on the
+// layer, not the directory — the public layer ships workflows of its own.
 const workflows = join(target, '.github', 'workflows')
-if (existsSync(workflows)) {
+if (args.layers.includes('ci')) {
   const wanted =
     toolchain === 'pnpm' ? 'verify.yml' : `verify-${toolchain}.yml`
   const variants = readdirSync(workflows).filter((file) =>
@@ -197,16 +216,14 @@ const dropped = {
 for (const file of dropped[toolchain])
   rmSync(join(target, file), { force: true })
 
-// 4. Every stamp vendors the standard — the jig is a stamp, not a runtime
-// dependency; the in-repo copy governs from here on.
-{
-  const standard = readFileSync(join(jigRoot, 'AGENTS.md'), 'utf8')
-  const stamp = `<!-- vendored from the jig on ${new Date().toISOString().slice(0, 10)} -->\n\n`
-  mkdirSync(join(target, 'docs'), { recursive: true })
-  writeFileSync(join(target, 'docs', 'STANDARDS.md'), stamp + standard)
-}
+// 3b. The one-project deploy wiring (root vercel.json with web + api services,
+// and the test that guards it) only makes sense when both halves are stamped.
+// An API-only product picks its own deploy and records it in DEVIATIONS.md.
+if (args.flavors.includes('api-hono') && !args.flavors.includes('web-vite'))
+  for (const file of ['vercel.json', 'apps/api/src/deploy.test.ts'])
+    rmSync(join(target, file), { force: true })
 
-// 5. Placeholder substitution in file contents.
+// 4. Placeholder substitution in file contents.
 walk(target, (path, entry) => {
   if (!entry.isFile()) return
   if (statSync(path).size > 512 * 1024) return
@@ -215,11 +232,42 @@ walk(target, (path, entry) => {
   if (replaced !== content) writeFileSync(path, replaced)
 })
 
+// 5. A placeholder that survives is a template bug (a formatter reshaped it,
+// or it was never registered above). Refuse to hand over a broken stamp.
+// GitHub's `${{ github.x }}` expressions are lowercase and don't match.
+{
+  const placeholder = /\{\{\s*[A-Z][A-Z0-9_]*\s*\}\}/
+  const leftovers = []
+  walk(target, (path, entry) => {
+    const inPath = placeholder.test(entry.name)
+    const inContent =
+      entry.isFile() &&
+      statSync(path).size <= 512 * 1024 &&
+      placeholder.test(readFileSync(path, 'utf8'))
+    if (inPath || inContent) leftovers.push(relative(target, path))
+  })
+  if (leftovers.length > 0)
+    fail(
+      `unsubstituted placeholder in the stamp — fix the template, then delete ${target}:\n` +
+        leftovers.map((path) => `  ${path}`).join('\n'),
+    )
+}
+
+// 6. Every stamp vendors the standard — the jig is a stamp, not a runtime
+// dependency; the in-repo copy governs from here on. Written last so the
+// standard is never itself subject to substitution.
+{
+  const standard = readFileSync(join(jigRoot, 'AGENTS.md'), 'utf8')
+  const stamp = `<!-- vendored from the jig on ${new Date().toISOString().slice(0, 10)} -->\n\n`
+  mkdirSync(join(target, 'docs'), { recursive: true })
+  writeFileSync(join(target, 'docs', 'STANDARDS.md'), stamp + standard)
+}
+
 // --- git + verify ----------------------------------------------------------
 
 const run = (cmd) => execSync(cmd, { cwd: target, stdio: 'inherit' })
 
-// 6. Swift import order depends on the project name (`<Name>Core` sorts
+// 7. Swift import order depends on the project name (`<Name>Core` sorts
 // either side of `SwiftUI`), so the stamp is formatted, not hand-sorted.
 if (toolchain === 'swift')
   run('xcrun swift-format format -i --recursive apps packages')
@@ -244,4 +292,5 @@ if (toolchain === 'swift')
   console.log(`  0. brew bundle   # XcodeGen; swift-format ships with Xcode`)
 console.log(`  1. ${pm} install   # also installs git hooks`)
 console.log(`  2. fill in AGENTS.md (identity, stack, invariants)`)
-console.log(`  3. write your first plan in docs/plans/active/`)
+console.log(`  3. infisical init, then copy .envrc.example to .envrc`)
+console.log(`  4. write your first plan in docs/plans/active/`)

@@ -16,4 +16,5 @@ Docs skeleton, canonical `AGENTS.md`, base template, core flavors, ci/public lay
 - **Auto-discovery CI matrix** for multi-app repos — trigger: a jig project where per-app CI wall-time hurts.
 - **Prod smoke-suite + screenshot-harness pattern** as an optional layer — trigger: second project that wants one.
 - **Turborepo/Nx, changesets, shared config packages** — trigger: CI wall-time or publishing needs make them earn their place.
-- **Jig self-verify** (stamp-and-verify as the repo's own test suite) — trigger: first template regression that a smoke stamp would have caught.
+- **Gitleaks in CI for public repos** (the standard says hooks *and* CI; the `public` layer only ships the hook) — trigger: first outside contributor PR on any public jig project, since their machine won't have the hook.
+- **Formatting the template in place** (a Prettier pass over `template/` that understands placeholders) — trigger: a stamp fails `format:check` because of template drift the smoke stamp didn't cover.

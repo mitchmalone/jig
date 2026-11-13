@@ -36,7 +36,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleName: {{PROJECT_PASCAL}}
-        CFBundleDisplayName: {{PROJECT_PASCAL}}
+        CFBundleDisplayName: '{{PROJECT_TITLE}}'
         LSApplicationCategoryType: public.app-category.productivity
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
     settings:

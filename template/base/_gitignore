@@ -1,13 +1,15 @@
 node_modules/
 dist/
 .next/
+out/
+next-env.d.ts
 *.tsbuildinfo
 .DS_Store
 
-# env: commit .example templates only
+# env: Infisical + direnv inject it; no real value lives on disk
+.envrc
 .env
 .env.*
-!.env.*.example
 
 # claude/agent personal state
 .claude/settings.local.json
@@ -20,3 +22,6 @@ local/*
 
 # interrupted bun-compile intermediates
 *.bun-build
+
+# Vercel
+.vercel/
