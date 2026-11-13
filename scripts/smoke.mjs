@@ -82,6 +82,21 @@ for (const name of requested)
   }
 const selected = requested.length > 0 ? requested : Object.keys(compositions)
 
+// The stamp makes an initial commit; CI runners have no git identity. These
+// only fill the gap — a configured identity or existing env still wins.
+const hasGitIdentity =
+  spawnSync('git', ['config', 'user.name']).status === 0 &&
+  spawnSync('git', ['config', 'user.email']).status === 0
+const env = hasGitIdentity
+  ? process.env
+  : {
+      GIT_AUTHOR_NAME: 'jig smoke',
+      GIT_AUTHOR_EMAIL: 'smoke@jig.invalid',
+      GIT_COMMITTER_NAME: 'jig smoke',
+      GIT_COMMITTER_EMAIL: 'smoke@jig.invalid',
+      ...process.env,
+    }
+
 const scratch = mkdtempSync(join(tmpdir(), 'jig-smoke-'))
 const results = []
 
@@ -94,7 +109,7 @@ for (const name of selected) {
   console.log(`\n=== smoke: ${name} ===`)
   const dir = join(scratch, name)
   const run = (command, commandArgs, cwd) =>
-    spawnSync(command, commandArgs, { cwd, stdio: 'inherit' }).status === 0
+    spawnSync(command, commandArgs, { cwd, stdio: 'inherit', env }).status === 0
   const passed =
     run(process.execPath, [
       generator,
