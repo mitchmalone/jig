@@ -1,6 +1,6 @@
 ---
 title: Stamp rot, project-name bug, and jig self-verify
-status: active
+status: done
 created: 2026-11-13
 updated: 2026-11-13
 links: []
@@ -23,13 +23,13 @@ Fix the hazard (no tokens in JSX expression position), make the generator fail o
 ## Steps
 
 - [x] Commit the pending Next/Vercel ignore fixes.
-- [ ] Generator tests (`node --test`) + leftover-token guard + JSX tokens moved into strings.
-- [ ] Jig root gate: `package.json`, lefthook, commitlint, CI workflow, smoke stamps.
-- [ ] Composition: `public` layer adds gitleaks via a lefthook fragment; CI-variant picker only runs for the `ci` layer.
-- [ ] Naming: strict kebab validation, `--title` / `{{PROJECT_TITLE}}`.
-- [ ] Tidy: Infisical recipe replaces `_env.api.example`, toolchain-aware commands in stamped docs, README.
-- [ ] Dependency and Actions bumps, verified by smoke stamps.
-- [ ] Docs close-out.
+- [x] Generator tests (`node --test`) + leftover-token guard + JSX tokens moved into strings.
+- [x] Jig root gate: `package.json`, lefthook, commitlint, CI workflow, smoke stamps.
+- [x] Composition: `public` layer adds gitleaks via a lefthook fragment; CI-variant picker only runs for the `ci` layer.
+- [x] Naming: strict kebab validation, `--title` / `{{PROJECT_TITLE}}`.
+- [x] Tidy: Infisical recipe replaces `_env.api.example`, toolchain-aware commands in stamped docs, README.
+- [x] Dependency and Actions bumps, verified by smoke stamps.
+- [x] Docs close-out.
 
 ## Acceptance criteria
 

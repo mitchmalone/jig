@@ -2,6 +2,14 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-11-13 — The jig's own gate: zero-dependency tests, no formatter over the template
+
+The jig gets a pnpm root as a gate runner (lefthook, commitlint, gitleaks) and `verify` = `node --check` on the scripts + `node --test` generator tests + smoke stamps that install and run each composition's own gate. Context: a placeholder regression shipped in every web stamp for three months because the jig had no gate, which fired the roadmap's self-verify trigger. Two departures from the standard, both deliberate. Tests use `node:test`, not Vitest: the generator is a zero-dependency script and its tests should not need an install to run. And there is no Prettier/ESLint pass over the repo: template files are not valid source until stamped (placeholders in identifiers, YAML keys, file names), and a formatter over them is exactly what caused the bug — formatting and lint are asserted where they are meaningful, inside the smoke stamps. Reconverge trigger for the formatter: a placeholder-aware format step (see ROADMAP).
+
+## 2026-11-13 — `--title` is separate from `--name`; unsafe titles are refused, not escaped
+
+`--name` stays the machine identifier (kebab-case: package names, binary names, bundle id suffix); `{{PROJECT_TITLE}}` is the human name used in headings, page titles and the app display name, defaulting to the name in Title Case. A title containing quotes, backslashes, `<>`, `{}` or `&` is rejected. Reasoning: the title lands in TS strings, HTML, YAML and Markdown, and per-file-type escaping in a zero-dependency generator is more machinery than a one-time `--title` deserves; an awkward title is a one-line edit after stamping.
+
 ## 2026-09-05 — Swift repos have no CI verify job; runners are for releases only
 
 The `ci` layer refuses to compose with `desktop-swift`. The pre-push hook on the developer's Mac is the gate; GitHub macOS runners are used only for tag-triggered release builds. Context: the flavor initially shipped a macOS `verify` workflow. Reasoning (Mitch): the code is already built and verified on a Mac before every push, so a runner re-doing it buys nothing and macOS minutes bill at 10× Linux on private repos. Reconverge trigger: a second contributor on a Swift project, where "green on my Mac" stops being a shared fact.
