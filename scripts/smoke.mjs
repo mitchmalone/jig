@@ -4,11 +4,24 @@
 // this is the jig's integration test, run by `pnpm verify`.
 //
 //   node scripts/smoke.mjs [pnpm|bun|swift ...]   # default: all available
+//
+// A composition whose toolchain is missing is skipped, loudly (stderr and the
+// results). JIG_SMOKE_REQUIRE, a comma-separated list of composition names or
+// `all`, turns those skips into failures: the Mac that gates Swift exports
+// JIG_SMOKE_REQUIRE=swift so a missing Xcode fails the gate.
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { xcodeStatus } from './xcode-status.mjs'
 
 const generator = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -58,19 +71,24 @@ const compositions = {
     args: ['--flavors', 'www-next,api-hono,web-vite', '--layers', 'ci,public'],
     build: 'pnpm build',
     after: deployTopology,
-    unavailable: !has('pnpm') && 'pnpm not installed',
+    unavailable: () => !has('pnpm') && 'pnpm not installed',
   },
   bun: {
     args: ['--flavors', 'tui-bun,www-next', '--layers', 'ci,public'],
     build: 'bun run build',
-    unavailable: !has('bun') && 'bun not installed',
+    unavailable: () => !has('bun') && 'bun not installed',
   },
   swift: {
     // `verify` already builds the app.
     args: ['--flavors', 'desktop-swift', '--layers', 'public'],
-    unavailable:
-      (process.platform !== 'darwin' && 'needs macOS') ||
-      (!has('xcodebuild') && 'Xcode not installed'),
+    label: 'the Swift template',
+    gatedBy: 'the Mac that gates Swift',
+    // The stamp's verify builds with xcodebuild, which needs a selected Xcode.
+    unavailable: () => {
+      if (process.platform !== 'darwin') return 'needs macOS'
+      const xcode = xcodeStatus()
+      return !xcode.ok && xcode.reason
+    },
   },
 }
 
@@ -81,6 +99,17 @@ for (const name of requested)
     process.exit(1)
   }
 const selected = requested.length > 0 ? requested : Object.keys(compositions)
+
+const required = (process.env.JIG_SMOKE_REQUIRE ?? '')
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean)
+for (const name of required)
+  if (name !== 'all' && !compositions[name]) {
+    console.error(`error: JIG_SMOKE_REQUIRE names unknown composition "${name}"`)
+    process.exit(1)
+  }
+const isRequired = (name) => required.includes('all') || required.includes(name)
 
 // The stamp makes an initial commit; CI runners have no git identity. These
 // only fill the gap — a configured identity or existing env still wins.
@@ -101,9 +130,17 @@ const scratch = mkdtempSync(join(tmpdir(), 'jig-smoke-'))
 const results = []
 
 for (const name of selected) {
-  const { args, build, after, unavailable } = compositions[name]
-  if (unavailable) {
-    results.push([name, `skipped (${unavailable})`])
+  const { args, build, after, unavailable, label, gatedBy } = compositions[name]
+  const reason = unavailable()
+  if (reason && isRequired(name)) {
+    console.error(`error: ${name} is required (JIG_SMOKE_REQUIRE) but ${reason}`)
+    results.push([name, `FAILED (required, ${reason})`])
+    continue
+  }
+  if (reason) {
+    const outcome = `skipped (${reason}) — ${label ?? `the ${name} composition`} is NOT verified by this run; set JIG_SMOKE_REQUIRE=${name} on ${gatedBy ?? 'the machine that gates it'}`
+    console.warn(`warning: ${name}: ${outcome}`)
+    results.push([name, outcome])
     continue
   }
   console.log(`\n=== smoke: ${name} ===`)
@@ -128,8 +165,9 @@ for (const name of selected) {
 console.log('\nsmoke results:')
 for (const [name, outcome] of results) console.log(`  ${name}: ${outcome}`)
 
-const failed = results.some(([, outcome]) => outcome === 'FAILED')
+const failed = results.some(([, outcome]) => outcome.startsWith('FAILED'))
 // Keep a failed stamp around for inspection.
-if (failed) console.log(`\nstamps kept at ${scratch}`)
+if (failed && readdirSync(scratch).length > 0)
+  console.log(`\nstamps kept at ${scratch}`)
 else rmSync(scratch, { recursive: true, force: true })
 process.exit(failed ? 1 : 0)

@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { after, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { parseXcodeProbe } from './xcode-status.mjs'
 
 const jigRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const scratch = mkdtempSync(join(tmpdir(), 'jig-test-'))
@@ -305,4 +306,36 @@ describe('session system', () => {
     assert.ok(existsSync(join(dir, 'scripts/xcode.mjs')))
     },
   )
+})
+
+describe('parseXcodeProbe', () => {
+  it('accepts a working xcodebuild', () => {
+    assert.deepEqual(parseXcodeProbe({ status: 0, stderr: '' }), {
+      ok: true,
+      reason: '',
+    })
+  })
+
+  it('quotes the first stderr line when Xcode is not usable', () => {
+    const { ok, reason } = parseXcodeProbe({
+      status: 1,
+      stderr:
+        "\nxcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance\nmore\n",
+    })
+    assert.equal(ok, false)
+    assert.match(reason, /^Xcode not usable: xcode-select: error: tool 'xcodebuild' requires Xcode/)
+    assert.doesNotMatch(reason, /more/)
+    assert.match(reason, /xcode-select -p and xcodebuild -license/)
+  })
+
+  it('names a missing binary and a timeout', () => {
+    const missing = parseXcodeProbe({ status: null, error: { code: 'ENOENT' } })
+    assert.deepEqual(missing, { ok: false, reason: 'xcodebuild not found' })
+    const timedOut = parseXcodeProbe({
+      status: null,
+      stderr: '',
+      error: { code: 'ETIMEDOUT', message: 'spawnSync xcodebuild ETIMEDOUT' },
+    })
+    assert.match(timedOut.reason, /ETIMEDOUT/)
+  })
 })

@@ -23,6 +23,7 @@ import {
 } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { xcodeStatus } from './xcode-status.mjs'
 
 const jigRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const templateRoot = join(jigRoot, 'template')
@@ -139,6 +140,14 @@ if (toolchain === 'swift' && args.layers.includes('ci'))
   fail(
     'the ci layer does not apply to desktop-swift — the pre-push hook is the gate; runners are for releases',
   )
+
+// The Swift stamp's verify runs `pnpm build` → xcodebuild, which needs Xcode
+// selected; the Command Line Tools alone fail deep inside verify. Refuse
+// before writing anything rather than after a full install.
+if (args.verify && toolchain === 'swift') {
+  const xcode = xcodeStatus()
+  if (!xcode.ok) fail(`--verify on a Swift stamp needs Xcode. ${xcode.reason}`)
+}
 
 // --- compose ---------------------------------------------------------------
 
@@ -310,7 +319,7 @@ console.log(`  flavors: ${args.flavors.join(', ') || '(none)'}`)
 console.log(`  layers:  ${args.layers.join(', ') || '(none)'}`)
 console.log(`\nnext steps:`)
 if (toolchain === 'swift')
-  console.log(`  0. brew bundle   # XcodeGen; swift-format ships with Xcode`)
+  console.log(`  0. brew bundle   # XcodeGen; swift-format ships with Xcode and the Command Line Tools; verify needs Xcode`)
 console.log(`  1. ${pm} install   # also installs git hooks`)
 console.log(`  2. fill in AGENTS.md (identity, stack, invariants)`)
 console.log(`  3. infisical init, then copy .envrc.example to .envrc`)
