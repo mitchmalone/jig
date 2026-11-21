@@ -21,11 +21,12 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 export class SessionError extends Error {}
 
@@ -96,8 +97,11 @@ function defaultRun(command, args, { input } = {}) {
       maxBuffer: 64 * 1024 * 1024,
     })
   } catch (error) {
-    if (error.code === 'ENOENT') throw new Error(`${command} is not installed`)
-    throw new Error(String(error.stderr || error.message).trim())
+    if (error.code === 'ENOENT')
+      throw new Error(`${command} is not installed`, { cause: error })
+    throw new Error(String(error.stderr || error.message).trim(), {
+      cause: error,
+    })
   }
 }
 
@@ -126,11 +130,7 @@ function createStores(config, run) {
   const board = (args, options) => {
     try {
       return parseJson(
-        run(
-          'vercel',
-          ['board', ...args, '--json', '--scope', scope],
-          options,
-        ),
+        run('vercel', ['board', ...args, '--json', '--scope', scope], options),
       )
     } catch (error) {
       // A channel exists from its first post; before that, reads fail.
@@ -311,7 +311,9 @@ function renderLearnings(learnings, config) {
 function loadConfig(root) {
   const path = join(root, 'session.config.json')
   if (!existsSync(path))
-    fail('no session.config.json at the repo root: this project has no session settings')
+    fail(
+      'no session.config.json at the repo root: this project has no session settings',
+    )
   const config = JSON.parse(readFileSync(path, 'utf8'))
   const missing = [
     ['board.scope', config.board?.scope],
@@ -368,7 +370,10 @@ function pull({ dir, config, stores, now, log }) {
 
   const startedAt = now().toISOString()
   mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'backlog.md'), renderBacklog(items, config, startedAt))
+  writeFileSync(
+    join(dir, 'backlog.md'),
+    renderBacklog(items, config, startedAt),
+  )
   writeFileSync(join(dir, 'handoff.md'), renderHandoff(handoff, since, config))
   writeFileSync(join(dir, 'learnings.md'), renderLearnings(learnings, config))
   writeFileSync(
@@ -425,7 +430,8 @@ function set({ stores, log }, [id], flags) {
   return 0
 }
 
-const readText = (root, file) => readFileSync(resolve(root, file), 'utf8').trim()
+const readText = (root, file) =>
+  readFileSync(resolve(root, file), 'utf8').trim()
 
 function raise({ root, config, stores, log }, [title], flags) {
   if (!title) fail('raise needs a title')
@@ -461,8 +467,7 @@ function close({ root, dir, stores, log }, _positional, flags) {
   if (flags.blocked) oneOf(flags.blocked, BLOCKERS, 'blocker')
   const text = readText(root, flags.file)
   const missing = HEADINGS.filter((heading) => !text.includes(heading))
-  if (missing.length > 0)
-    fail(`the handoff is missing ${missing.join(', ')}`)
+  if (missing.length > 0) fail(`the handoff is missing ${missing.join(', ')}`)
   const posted = stores.post(text, {
     kind: 'handoff',
     state,
@@ -511,7 +516,10 @@ export function main(
   return handlers[command](context, positional, flags)
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+// Run only as a command, not when imported. Compared by real path, so a
+// symlink to this file still runs it.
+const invoked = process.argv[1] && realpathSync(process.argv[1])
+if (invoked === fileURLToPath(import.meta.url)) {
   try {
     process.exitCode = main(process.argv.slice(2))
   } catch (error) {

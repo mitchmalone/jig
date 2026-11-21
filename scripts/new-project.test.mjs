@@ -217,3 +217,87 @@ describe('stamped docs and env', () => {
     assert.match(read(dir, '.gitignore'), /^\.envrc$/m)
   })
 })
+
+describe('session system', () => {
+  it('stamps the two session commands and the script they drive', () => {
+    const dir = stampOk('my-thing')
+    for (const skill of ['session-start', 'session-end'])
+      assert.match(
+        read(dir, `.claude/skills/${skill}/SKILL.md`),
+        new RegExp(`^---\\nname: ${skill}\\n`),
+      )
+    assert.match(read(dir, 'scripts/session.mjs'), /^#!\/usr\/bin\/env node/)
+  })
+
+  it('points the project at its own channel and backlog entries', () => {
+    const dir = stampOk('my-thing', ['--title', 'MyThing'])
+    assert.deepEqual(JSON.parse(read(dir, 'session.config.json')), {
+      board: { scope: 'ramenamok', channel: 'my-thing', profile: 'claude' },
+      backlog: {
+        dataSource: '41f3d7d1-79ad-8045-a361-000b56ae7f12',
+        project: 'MyThing',
+      },
+    })
+  })
+
+  it("takes another owner's team and backlog", () => {
+    const dir = stampOk('my-thing', [
+      '--board-scope',
+      'acme',
+      '--backlog',
+      'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    ])
+    const config = JSON.parse(read(dir, 'session.config.json'))
+    assert.equal(config.board.scope, 'acme')
+    assert.equal(
+      config.backlog.dataSource,
+      'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    )
+  })
+
+  it('rejects settings that would break the stamped JSON', () => {
+    for (const flag of ['--board-scope', '--backlog']) {
+      const result = stamp('my-thing', [flag, 'a"b'])
+      assert.notEqual(result.status, 0)
+      assert.match(result.stderr, new RegExp(flag))
+    }
+  })
+
+  it('keeps decisions in the repo and nothing else of the old docs system', () => {
+    const dir = stampOk('my-thing', PNPM)
+    assert.ok(existsSync(join(dir, 'docs/DECISIONS.md')))
+    for (const retired of ['STATUS.md', 'ROADMAP.md', 'JOURNAL.md', 'plans'])
+      assert.equal(existsSync(join(dir, 'docs', retired)), false, retired)
+  })
+
+  it('leaves no pointer to a retired doc anywhere in a stamp', () => {
+    const dir = stampOk('my-thing', PNPM)
+    const stale = files(dir).filter((path) =>
+      /docs\/(STATUS|ROADMAP|JOURNAL)\.md|docs\/plans|plans\/active/.test(
+        readFileSync(path, 'utf8'),
+      ),
+    )
+    assert.deepEqual(stale, [])
+  })
+
+  it('names the session commands in the stamped AGENTS.md', () => {
+    const agents = read(stampOk('my-thing'), 'AGENTS.md')
+    assert.match(agents, /\/session-start/)
+    assert.match(agents, /\/session-end/)
+    assert.match(agents, /`my-thing`/)
+  })
+
+  it('gives public repos a curated learnings file, private repos none', () => {
+    assert.ok(existsSync(join(stampOk('my-thing', PNPM), 'docs/LEARNINGS.md')))
+    assert.equal(
+      existsSync(join(stampOk('my-thing'), 'docs/LEARNINGS.md')),
+      false,
+    )
+  })
+
+  it('keeps the session script beside the Swift flavor scripts', () => {
+    const dir = stampOk('my-thing', ['--flavors', 'desktop-swift'])
+    assert.ok(existsSync(join(dir, 'scripts/session.mjs')))
+    assert.ok(existsSync(join(dir, 'scripts/xcode.mjs')))
+  })
+})

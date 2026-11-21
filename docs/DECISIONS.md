@@ -2,6 +2,25 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-11-21 — Working state moves out of the repo: Notion backlog, Board handoffs and learnings, two session commands
+
+`STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` are retired. Work items live in one shared Notion database (The Backlog, a `Project` value per repo). Session handoffs and learnings live on the Vercel Board, one channel per repo. A session's plan and its copy of both live in gitignored `local/session/`. `/session-start` and `/session-end` are stamped into every project and drive a stamped, zero-dependency `scripts/session.mjs`. `DECISIONS.md` stays in the repo. Public repos add a curated `docs/LEARNINGS.md`. The `board-ops` repo of Board conventions is folded into the standard.
+
+Context: Wriker ran a Board handoff routine from an `AGENTS.md` block alone and it did not fire on its own; Mitch had to ask for the handoff after a day of work. And the backlog was spread across one `ROADMAP.md` and one `STATUS.md` per repo, which nobody can manage across projects.
+
+Reasoning:
+
+- **Commands, not instructions.** A routine that depends on the agent remembering a paragraph loses to whatever the session is busy with. A command the person runs, backed by a script with tests, does not.
+- **Decisions stay in the repo** because the Board has no search, no versioning and edits in place, and a decision has to be findable months later and reviewable beside the code it constrains. This is the one part of the old system that was doing a job nothing else can.
+- **Scripts for the fixed paths, the Notion connector for judgement.** Pulling the backlog and posting a handoff happen every session and should be identical every time; a model composing those calls afresh is slower and varies.
+- **`In Progress` is the lock**, re-read live before a claim, so no extra property is needed to keep two sessions off one item. No priority field either: one more thing to maintain, and the choice is made in conversation.
+- **Learnings are posted when they happen**, and a failed close keeps `local/session/` for the next `/session-start` to finish, because sessions die.
+- **Board tasks are not used as a backlog.** Their claims are short leases built for swarms; two task systems would drift.
+
+Costs accepted: a session needs network and two logins (`ntn`, `vercel`) to start; learnings and handoffs are no longer versioned with the code; the Board is experimental and US-hosted. Reconverge trigger: the Board changes terms or loses data — learnings move into the repo beside the decisions. The owner's team and data source are generator defaults (`--board-scope`, `--backlog`), not secrets; a fork passes its own.
+
+Deferred: a hook that closes a session automatically (trigger: a session is lost without `/session-end` more than once); a Board profile per session (trigger: two sessions on one project at once become routine); agents other than Claude Code.
+
 ## 2026-11-13 — The one-project deploy is implemented with Vercel Services, and it is stamped and gated
 
 The 2026-08-11 topology stands (two Vercel projects per product; the API rides in the app project). What changes is the mechanism and where it lives. Mechanism: the root `vercel.json` declares `web` and `api` as Vercel Services of one project rooted at the repo, replacing the planned catch-all function inside `apps/web` — Services builds each app with its own framework preset, bundles workspace packages, and deploys both atomically, with no hand-written function wrapper. Where it lives: in the template and in the stamp's `verify`, not only in the standard. Context: the standard said "don't give the API its own project" from day one, but the template shipped a standalone Node server and no Vercel config, so every project rebuilt the wiring by hand and the easy path was a third project — the rule was being held up by memory. Reasoning: a standard clause that can be an artifact plus a failing test should be; prose alone loses to whatever is quickest on the day. Known limit: nothing in a repo can see the Vercel dashboard, so a hand-made third project is only caught locally (a `vercel link` in `apps/api` fails the test). Add a Vercel-API check if that ever actually happens.

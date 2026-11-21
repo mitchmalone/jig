@@ -4,7 +4,8 @@
 //   node scripts/new-project.mjs --name my-thing [--dir path] \
 //     [--flavors www-next,api-hono] [--layers ci,public] \
 //     [--title "My Thing"] [--author "Name"] \
-//     [--bundle-id com.example.my-thing] [--no-git] [--verify]
+//     [--bundle-id com.example.my-thing] [--no-git] [--verify] \
+//     [--board-scope team] [--backlog notion-data-source-id]
 //
 // Compose order: base → flavors → layers (later files overwrite earlier).
 // Zero dependencies; bare Node.
@@ -45,6 +46,8 @@ function parseArgs(argv) {
       args.layers = value().split(',').filter(Boolean)
     else if (arg === '--author') args.author = value()
     else if (arg === '--bundle-id') args.bundleId = value()
+    else if (arg === '--board-scope') args.boardScope = value()
+    else if (arg === '--backlog') args.backlog = value()
     else if (arg === '--no-git') args.git = false
     else if (arg === '--verify') args.verify = true
     else fail(`unknown argument: ${arg}`)
@@ -69,6 +72,18 @@ const nameParts = args.name.split('-')
 const title = args.title ?? nameParts.map(capitalize).join(' ')
 if (!title.trim() || /['"`\\<>{}&\n]/.test(title))
   fail('--title must not be empty or contain quotes, backslashes, <>, {} or &')
+
+// Where the project's working state lives outside the repo: the Vercel team
+// whose Board carries handoffs and learnings, and the Notion data source that
+// is the backlog. The defaults are the jig owner's; a fork changes them here
+// or passes the flags. Neither is a secret.
+const boardScope = args.boardScope ?? 'ramenamok'
+if (!/^[a-z0-9][a-z0-9-]*$/.test(boardScope))
+  fail('--board-scope must be a Vercel team slug: lowercase letters, digits and hyphens')
+const backlogDataSource =
+  args.backlog ?? '41f3d7d1-79ad-8045-a361-000b56ae7f12'
+if (!/^[0-9a-f-]{32,36}$/.test(backlogDataSource))
+  fail('--backlog must be a Notion data source id')
 
 const available = (kind) =>
   readdirSync(join(templateRoot, kind), { withFileTypes: true })
@@ -158,6 +173,8 @@ const substitutions = [
   ['{{BUNDLE_ID_PREFIX}}', bundleIdPrefix],
   ['{{BUNDLE_ID}}', bundleId],
   ['{{AUTHOR}}', author],
+  ['{{BOARD_SCOPE}}', boardScope],
+  ['{{BACKLOG_DATA_SOURCE}}', backlogDataSource],
   ['{{YEAR}}', String(new Date().getFullYear())],
   ['{{PM}}', pm],
   ['{{LOCKFILE}}', pm === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml'],
@@ -293,4 +310,4 @@ if (toolchain === 'swift')
 console.log(`  1. ${pm} install   # also installs git hooks`)
 console.log(`  2. fill in AGENTS.md (identity, stack, invariants)`)
 console.log(`  3. infisical init, then copy .envrc.example to .envrc`)
-console.log(`  4. write your first plan in docs/plans/active/`)
+console.log(`  4. start a Claude Code session and run /session-start`)

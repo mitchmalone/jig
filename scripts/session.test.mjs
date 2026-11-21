@@ -2,17 +2,20 @@
 // project gets a copy); its tests live here, where the jig's gate runs them.
 // No network: `ntn` and `vercel board` are replaced by a recording fake.
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { after, beforeEach, describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import { SessionError, main } from '../template/base/scripts/session.mjs'
 
@@ -524,5 +527,34 @@ describe('configuration', () => {
 
   it('lists the commands when given one it does not know', () => {
     assert.throws(() => session(['sync']), /pull.*start.*set/s)
+  })
+})
+
+describe('as a command', () => {
+  const script = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../template/base/scripts/session.mjs',
+  )
+
+  it('reports a failure on stderr and exits 1', () => {
+    rmSync(join(root, 'session.config.json'))
+    const result = spawnSync(process.execPath, [script, 'pull'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /^error: no session\.config\.json/)
+  })
+
+  it('runs when reached through a symlink', () => {
+    // The jig shares the template's copy this way.
+    const link = join(root, 'session.mjs')
+    symlinkSync(script, link)
+    const result = spawnSync(process.execPath, [link, 'nonsense'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /usage: session\.mjs/)
   })
 })
