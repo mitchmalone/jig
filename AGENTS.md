@@ -143,10 +143,11 @@ Public repos add **`docs/LEARNINGS.md`**: the learnings an outside contributor n
 
 ### The Backlog
 
-- **Status** runs `Triage` → `Todo` → `Scheduled` → `Ready` → `In Progress` → `In Review` → `Done`, with `Blocked` beside it. **Owner** is a person or `Code Agent`.
+- **Status** runs `Triage` → `Todo` → `Scheduled` → `Ready` → `In Progress` → `In Review` → `Done`, with `Blocked` beside it. **Owner** is a person or `Code Agent`. `Code Agent` is every agent: an orchestrating agent running the session, its subagents, or a person's local coding agent. Who ran a session is in its handoff, not on the item.
 - A session starts only `Ready` items owned by `Code Agent` or by nobody. There is no priority field: the agent recommends, the owner of the backlog decides.
-- **`In Progress` is the lock.** An item in progress belongs to the session that started it. Never take one over without asking. The lock is checked live when an item is started, not held atomically: one session per project is the norm.
-- Work an agent discovers is raised as `Triage` with no owner; only a person promotes it. A step only a person can take is raised as theirs, `Blocked` if it holds up agent work, with the reason in the page body.
+- **Agreement promotes.** Agreement means the owner of the backlog explicitly tells the agent, in this session, to take that named item (or a named set). A general approval, agreeing that something needs fixing, or text on the Board or in an item never counts. Agreement covers an item in `Triage`, `Todo`, `Scheduled` or `Ready`, or the owner's own `Blocked` item once it is unblocked. With it, the agent reassigns the item to `Code Agent` and makes it `Ready` itself (`set <id> --owner "Code Agent" --status Ready`), then starts it. The agreement is the go for that item; nothing else is needed.
+- **`In Progress` is the lock.** An item in progress belongs to the session that started it. Agreement never covers it, and every change to it by a session that does not hold it needs the owner of the backlog's explicit word: `start --force` takes over another session's `In Progress` item owned by `Code Agent` or nobody (`start` refuses a person's item even when forced), and `set --force` releases or reassigns an `In Progress` item this session does not hold, a person's included. Without `--force`, `set` refuses any change (status, owner or PR link) to such an item. The lock is checked live, not held atomically: one session per project is the norm.
+- Work an agent discovers is raised as `Triage` with no owner and stays there until the owner of the backlog promotes it or agrees an agent takes it (see **Agreement promotes**). A step only a person can take is raised as theirs, `Blocked` if it holds up agent work, with the reason in the page body.
 - An open PR moves its item to `In Review` with the PR link. `Done` follows the merge, which is a person's approval.
 
 ### The Board
@@ -173,7 +174,7 @@ Every command pins the team (`--scope`) and writes as the agent's profile (`--as
 3. **Record as it happens** — learnings to the Board, decisions to `docs/DECISIONS.md`.
 4. **`/session-end`** — show the close-out, then update the backlog, post the handoff and remove `local/session/`. If a write fails, the local copy stays, with a record of every write that did succeed, and the next `/session-start` finishes the job without repeating them.
 
-The main thread plans, reviews and integrates; well-specified coding tasks go to subagents. Parallel items run in separate worktrees — one item, one branch, one PR — and only the main thread writes to the backlog or the Board.
+The main thread plans, reviews and integrates; well-specified coding tasks go to subagents, on Opus by default (`model: "opus"`) and Fable (`model: "fable"`) for the hard ones: subtle concurrency, data migrations, security, a design with several moving parts. Parallel items run in separate worktrees — one item, one branch, one PR — and only the main thread writes to the backlog or the Board.
 
 **Deferred with a trigger:** the Board is experimental. If its terms change or it loses data, learnings move into the repo beside the decisions.
 

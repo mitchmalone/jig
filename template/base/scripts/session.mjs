@@ -8,7 +8,7 @@
 //
 //   node scripts/session.mjs pull
 //   node scripts/session.mjs start <item-id> [--force]
-//   node scripts/session.mjs set <item-id> [--status S] [--owner O] [--pr URL]
+//   node scripts/session.mjs set <item-id> [--status S] [--owner O] [--pr URL] [--force]
 //   node scripts/session.mjs raise "<title>" [--owner O] [--status S] [--file body.md]
 //   node scripts/session.mjs learn "<headline>" [--topic word] [--file body.md]
 //   node scripts/session.mjs close --file handoff.md --state <state> [--pr N] [--blocked kind]
@@ -48,8 +48,10 @@ const STATUSES = [
   'Triage',
   'Done',
 ]
-// The backlog's Owner options. A fork with other people edits these two.
-const OWNERS = ['Mitch', 'Beebee', 'Code Agent']
+// The backlog's Owner options: the people, then Code Agent, which stands for
+// every agent (an orchestrating agent, its subagents, or a person's local
+// coding agent). A fork with other people edits these two.
+const OWNERS = ['Mitch', 'Code Agent']
 const AGENT = 'Code Agent'
 const STATES = ['active', 'paused', 'waiting', 'review', 'done']
 const BLOCKERS = ['decision', 'external', 'access']
@@ -525,11 +527,15 @@ function readText(root, file) {
 
 function reportUnclosed(dir, log) {
   const state = loadState(dir)
-  if (!state)
+  if (!state) {
     log(
       'local/session/ has files but no readable session.json: an earlier session was not closed.',
     )
-  else {
+    // Its claims went with the record, so set and discard cannot see them.
+    log(
+      "Its claims are lost: find its In Progress items in the backlog and, on the user's word, release each with `node scripts/session.mjs set <id> --status Ready --force`.",
+    )
+  } else {
     log(`Unclosed session from ${state.startedAt} in local/session/.`)
     if (state.claimed.length > 0) {
       log('It claimed:')
@@ -616,14 +622,17 @@ function start({ dir, config, stores, log }, [rawId], flags) {
   const item = stores.item(id)
   if (item.dataSource !== config.backlog.dataSource)
     fail(`"${item.name}" is not in this project's backlog`)
-  if (!flags.force) {
-    if (item.status !== 'Ready')
-      fail(
-        `"${item.name}" is ${item.status || 'without a status'}, not Ready. Another session may hold it; ask, then use --force.`,
-      )
-    if (item.owner && item.owner !== AGENT)
-      fail(`"${item.name}" belongs to ${item.owner}, not to ${AGENT}.`)
-  }
+  if (!flags.force && item.status !== 'Ready')
+    fail(
+      `"${item.name}" is ${item.status || 'without a status'}, not Ready. Another session may hold it: take it over only on the owner of the backlog's word, with \`start --force\`.`,
+    )
+  // --force takes over another session's lock, never a person's item: that is
+  // released or reassigned with `set --force`, on the owner of the backlog's
+  // word.
+  if (item.owner && item.owner !== AGENT)
+    fail(
+      `"${item.name}" belongs to ${item.owner}, not to ${AGENT}. Once they agree, reassign it with \`set <id> --owner "${AGENT}" --status Ready\`.`,
+    )
   stores.update(id, { Status: select('In Progress'), Owner: select(AGENT) })
   record(dir, `start ${id}: ${item.name}`, (state) => {
     if (!state.claimed.some((claim) => claim.id === id))
@@ -647,6 +656,13 @@ function set({ dir, config, stores, log }, [rawId], flags) {
   const item = stores.item(id)
   if (item.dataSource !== config.backlog.dataSource)
     fail(`"${item.name}" is not in this project's backlog`)
+  // Changing an In Progress item releases or reassigns the lock, so only the
+  // session that holds it does that without the owner of the backlog's word.
+  const ours = loadState(dir)?.claimed.some((claim) => claim.id === id)
+  if (item.status === 'In Progress' && !ours && !flags.force)
+    fail(
+      `"${item.name}" is In Progress and this session does not hold it. Release or reassign it only on the owner of the backlog's word, with \`set --force\`; to take over another session's agent item, use \`start --force\`.`,
+    )
   stores.update(
     id,
     Object.fromEntries(
@@ -742,6 +758,14 @@ function close({ root, dir, stores, log }, _positional, flags) {
   else if (locked.length > 0) {
     log('Left still In Progress, which keeps other sessions off them:')
     for (const item of locked) log(`  - ${item.name} (${item.id})`)
+    // local/session/ is gone, so set no longer sees these as claimed.
+    log(
+      "To release one, set it to where it stands. These were this session's own claims, so --force is right:",
+    )
+    for (const item of locked)
+      log(
+        `  node scripts/session.mjs set ${item.id} --status <Ready|Blocked|In Review> --force`,
+      )
   }
   return 0
 }

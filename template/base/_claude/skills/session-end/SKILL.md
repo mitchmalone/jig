@@ -70,7 +70,7 @@ node scripts/session.mjs close --file local/session/close.md --state <state> [--
 
 `close` posts the handoff and then removes `local/session/`. It runs last because it destroys the reference the other commands were drafted from.
 
-`close` also lists any claimed item it is leaving `In Progress`. If it names one you did not mean to keep, set it now.
+`close` also lists any claimed item it is leaving `In Progress`, with the command to release each. If it names one you did not mean to keep, run that command with the status it stands at: `node scripts/session.mjs set <item-id> --status <Ready|Blocked|In Review> --force`. `local/session/` is gone, so `set` no longer sees the claim; these were this session's own claims, so `--force` is right.
 
 If any command fails, stop. Do not run `close`, and do not delete `local/session/` by hand. Tell the user exactly what was written and what was not. Every write that succeeded is recorded in `local/session/session.json`, so the next `/session-start` can finish the job without repeating any. Running the same `learn` or `close` again is safe: the Board posts identical text once.
 

@@ -523,13 +523,49 @@ describe('start', () => {
     assert.ok(calls.some((call) => call.line.includes('-X PATCH')))
   })
 
+  it("refuses a person's item even when forced: it is reassigned with set first", () => {
+    session(['pull'])
+    assert.throws(
+      () => session(['start', '11111111-1111-4111-8111-111111111111', '--force'], live('Ready', 'Mitch')),
+      /belongs to Mitch/,
+    )
+    assert.equal(
+      calls.some((call) => call.line.includes('-X PATCH')),
+      false,
+    )
+  })
+
+  it('starts a person\'s item once it is reassigned to the code agent', () => {
+    session(['pull'])
+    assert.throws(
+      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Mitch')),
+      /Mitch/,
+    )
+    // The owner agreed: the agent ran `set --owner "Code Agent" --status Ready`.
+    session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Code Agent'))
+    const patch = calls.find((call) => call.line.includes('-X PATCH'))
+    assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]).properties.Status, {
+      select: { name: 'In Progress' },
+    })
+  })
+
   it('needs a session', () => {
     assert.throws(() => session(['start', '11111111-1111-4111-8111-111111111111']), /pull/)
   })
 })
 
 describe('set', () => {
+  const ITEM = '77777777-7777-4777-8777-777777777777'
+  const live = (status, owner) => [
+    [`pages/${ITEM} -X PATCH`, {}],
+    [`pages/${ITEM}`, page(ITEM, 'An item', status, owner)],
+  ]
+  const patched = () => calls.some((call) => call.line.includes('-X PATCH'))
+
   it('moves an item to review with its PR link', () => {
+    session(['pull'])
+    session(['start', ITEM], live('Ready', 'Code Agent'))
+    calls = []
     session(
       ['set', '77777777-7777-4777-8777-777777777777', '--status', 'In Review', '--pr', 'https://gh.test/pr/4'],
       [
@@ -549,10 +585,50 @@ describe('set', () => {
     })
   })
 
+  it("refuses to change the status of an In Progress item another session holds", () => {
+    assert.throws(
+      () => session(['set', ITEM, '--owner', 'Code Agent', '--status', 'Ready'], live('In Progress', 'Code Agent')),
+      /In Progress.*--force/s,
+    )
+    assert.equal(patched(), false)
+  })
+
+  it('refuses it inside a session that did not claim the item', () => {
+    session(['pull'])
+    assert.throws(
+      () => session(['set', ITEM, '--status', 'Ready'], live('In Progress', 'Code Agent')),
+      /In Progress/,
+    )
+    assert.equal(patched(), false)
+  })
+
+  it('changes it when forced, after asking', () => {
+    session(['set', ITEM, '--status', 'Ready', '--force'], live('In Progress', 'Code Agent'))
+    assert.ok(patched())
+  })
+
+  it('takes a Todo item for the code agent and makes it Ready', () => {
+    session(['set', ITEM, '--owner', 'Code Agent', '--status', 'Ready'], live('Todo', 'Mitch'))
+    const patch = calls.find((call) => call.line.includes('-X PATCH'))
+    assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]), {
+      properties: {
+        Status: { select: { name: 'Ready' } },
+        Owner: { select: { name: 'Code Agent' } },
+      },
+    })
+  })
+
   it('rejects a status the backlog does not have', () => {
     assert.throws(
       () => session(['set', '77777777-7777-4777-8777-777777777777', '--status', 'Shipped'], []),
       /Shipped/,
+    )
+  })
+
+  it('has no owner for a named agent: Code Agent covers every agent', () => {
+    assert.throws(
+      () => session(['set', '77777777-7777-4777-8777-777777777777', '--owner', 'Beebee'], []),
+      /unknown owner "Beebee" \(have: Mitch, Code Agent\)/,
     )
   })
 
@@ -1254,5 +1330,71 @@ describe('review round two', () => {
       // Past the settings and on to the argument: the settings were found.
       assert.match(result.stderr, /not a Notion page id/)
     })
+  })
+})
+
+describe('review round three', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+  const HANDOFF = '**Changed:** x\n**Half-done:** y\n**Next:** z'
+  const item = (status, owner) => [
+    [`pages/${READY} -X PATCH`, {}],
+    [`pages/${READY}`, page(READY, 'Add the revoke button', status, owner)],
+  ]
+  const patched = () => calls.some((call) => call.line.includes('-X PATCH'))
+
+  it('gives the forced set for each claimed item close leaves In Progress', () => {
+    session(['pull'])
+    session(['start', READY], item('Ready'))
+    writeFileSync(local('close.md'), HANDOFF)
+    const { out } = session(
+      ['close', '--file', 'local/session/close.md', '--state', 'paused'],
+      [['board post', { id: 'm' }], ...item('In Progress', 'Code Agent')],
+    )
+    assert.ok(
+      out.includes(
+        `node scripts/session.mjs set ${READY} --status <Ready|Blocked|In Review> --force`,
+      ),
+      out,
+    )
+    assert.match(out, /this session's own claims/)
+  })
+
+  it('refuses to reassign an In Progress item this session does not hold', () => {
+    session(['pull'])
+    assert.throws(
+      () => session(['set', READY, '--owner', 'Mitch'], item('In Progress', 'Code Agent')),
+      /In Progress.*--force/s,
+    )
+    assert.equal(patched(), false)
+  })
+
+  it('refuses a PR link on an In Progress item this session does not hold', () => {
+    assert.throws(
+      () => session(['set', READY, '--pr', 'https://gh.test/pr/1'], item('In Progress', 'Code Agent')),
+      /In Progress/,
+    )
+    assert.equal(patched(), false)
+  })
+
+  it('reassigns it when forced', () => {
+    session(['pull'])
+    session(['set', READY, '--owner', 'Mitch', '--force'], item('In Progress', 'Code Agent'))
+    assert.ok(patched())
+  })
+
+  it("says set's refusal needs the owner of the backlog's word, and start --force takes over", () => {
+    assert.throws(
+      () => session(['set', READY, '--status', 'Ready'], item('In Progress', 'Mitch')),
+      /owner of the backlog.*start --force/s,
+    )
+  })
+
+  it("tells how to release a dead session's items when its record is unreadable", () => {
+    mkdirSync(join(root, 'local', 'session'), { recursive: true })
+    writeFileSync(local('session.json'), '{not json')
+    const { code, out } = session(['pull'], [])
+    assert.equal(code, 2)
+    assert.match(out, /set <id> --status Ready --force/)
+    assert.match(out, /user's word/)
   })
 })

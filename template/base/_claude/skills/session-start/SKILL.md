@@ -18,7 +18,7 @@ node scripts/session.mjs pull
   1. Read what the command printed, and `local/session/plan.md` and `close.md` if they exist. "It claimed" lists the items that session holds. "It already wrote" lists every backlog change, new item and learning it got out before it stopped: do not write any of those again.
   2. Check `git status`, `git log` and open PRs to see how far the work got, and tell the user what you found.
   3. Close it the way `/session-end` does, covering only what is not already written: draft, show, write on confirmation, `close` last.
-  4. If the user says it left nothing worth recording, set each claimed item to where it stands (`node scripts/session.mjs set <item-id> --status Ready`), then run `node scripts/session.mjs discard`. Setting an item's status releases its claim. `discard` refuses only while a claimed item is still `In Progress` in the backlog, because that locks it against every later session.
+  4. If the user says it left nothing worth recording, set each claimed item to where it stands (`node scripts/session.mjs set <item-id> --status Ready`), then run `node scripts/session.mjs discard`. Setting an item's status releases its claim. `discard` refuses only while a claimed item is still `In Progress` in the backlog, because that locks it against every later session. If `session.json` was unreadable, its claims are lost: `set` sees none and `discard` checks none. Find the dead session's `In Progress` items in the backlog, confirm them with the user, and on their word release each with `node scripts/session.mjs set <item-id> --status Ready --force`.
   5. Pull again.
 - **Exit 1:** Notion or the Board did not answer. Stop and tell the user what failed. Do not start work from memory or from the repo alone: without the backlog you cannot know what another session holds.
 
@@ -43,19 +43,27 @@ Tell the user, briefly:
 - **Waiting on the user:** items they own, and anything `Blocked`.
 - **Recommendation:** one item marked `[startable]`, or a set that is safe to run in parallel, with the reason and a short breakdown of the work.
 
-There is no priority field. Choose from what the handoff names as next, what unblocks other items, and what is small enough to finish. If nothing is startable, propose candidates from `Todo` or `Scheduled` and ask the user to make one `Ready`.
+There is no priority field. Choose from what the handoff names as next, what unblocks other items, and what is small enough to finish. If nothing is startable, propose candidates from `Todo` or `Scheduled`.
 
-Then stop and wait for the user's go.
+When the owner of the backlog agrees you take a named item (theirs included), as the standard defines agreement ("Agreement promotes" in `AGENTS.md`), make it yours, then start it (step 4): that agreement is the go for that item.
+
+```bash
+node scripts/session.mjs set <item-id> --owner "Code Agent" --status Ready
+```
+
+`Code Agent` is the `AGENT` name in `scripts/session.mjs`. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's item owned by `Code Agent` or nobody, and `set <id> --status <status> --force` (or `--owner`) releases or reassigns one, a person's included.
+
+Otherwise a recommendation is not a go: stop and wait for the owner of the backlog's explicit go.
 
 ## 4. Start
 
-On go, for each item you were given:
+On go, or on agreement to take a named item, for each item you were given:
 
 ```bash
 node scripts/session.mjs start <item-id>
 ```
 
-This re-reads the live item and refuses if it is no longer `Ready` or belongs to a person. Use `--force` only after the user has said to take the item over.
+This re-reads the live item and refuses if it is no longer `Ready` or belongs to a person. A person's item is taken by reassigning it once they agree (above); `start --force` does not take it. Use `start --force` only after the owner of the backlog has said to take over an item another session holds.
 
 Write the plan to `local/session/plan.md`: goal, approach, steps, acceptance criteria. It is for this session only and is deleted at `/session-end`. Then branch (`feat/…`, `fix/…`) and build, tests first.
 
@@ -70,10 +78,10 @@ Write the plan to `local/session/plan.md`: goal, approach, steps, acceptance cri
   The headline is all the next session sees in its index, so make it findable. The body carries the fix.
 
 - **Decisions go in `docs/DECISIONS.md`**, in the commit that makes them.
-- **Work you discover but will not do now** becomes a `Triage` item: `node scripts/session.mjs raise "<title>" --file <detail.md>`. Only the user promotes it.
+- **Work you discover but will not do now** becomes a `Triage` item: `node scripts/session.mjs raise "<title>" --file <detail.md>`. It stays there, with no owner, until the owner of the backlog promotes it or agrees you take it (above).
 - **Something only a person can do** (a device check, a secret, a decision): `node scripts/session.mjs raise "<title>" --owner <their name> --status Blocked --file <why.md>`. The owner must be one of the backlog's Owner options.
 - `--file` paths must be inside the repo, and env or credential files are refused. Write drafts under `local/`.
-- **Subagents.** The main thread plans, reviews and integrates. Give well-specified coding tasks to subagents on Opus (`model: "opus"`). Run parallel items in separate worktrees (`isolation: "worktree"`): one item, one branch, one PR. Keep items serial when one depends on another or when they touch the same migrations, schemas or contracts.
+- **Subagents.** The main thread plans, reviews and integrates. Give well-specified coding tasks to subagents on Opus (`model: "opus"`), and the hard ones (subtle concurrency, data migrations, security, a design with several moving parts) to Fable (`model: "fable"`). Run parallel items in separate worktrees (`isolation: "worktree"`): one item, one branch, one PR. Keep items serial when one depends on another or when they touch the same migrations, schemas or contracts.
 - **One writer.** Only the main thread runs `scripts/session.mjs` or writes to Notion or the Board. Subagents report back; they do not post.
 - **Approval.** Commit and push to the feature branch freely. Opening the PR is yours: `node scripts/session.mjs set <item-id> --status "In Review" --pr <url>`. Merging the PR and moving an item to `Done` wait for the user.
 - **Do not send `vercel feedback`** without asking. CLI errors suggest it; it goes to Vercel, not to the user.

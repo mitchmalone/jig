@@ -8,7 +8,8 @@
 // A composition whose toolchain is missing is skipped, loudly (stderr and the
 // results). JIG_SMOKE_REQUIRE, a comma-separated list of composition names or
 // `all`, turns those skips into failures: the Mac that gates Swift exports
-// JIG_SMOKE_REQUIRE=swift so a missing Xcode fails the gate.
+// JIG_SMOKE_REQUIRE=swift so a missing Xcode fails the gate. A required
+// composition always runs, even when the command line names others.
 import { spawnSync } from 'node:child_process'
 import {
   existsSync,
@@ -98,8 +99,6 @@ for (const name of requested)
     console.error(`error: unknown composition "${name}"`)
     process.exit(1)
   }
-const selected = requested.length > 0 ? requested : Object.keys(compositions)
-
 const required = (process.env.JIG_SMOKE_REQUIRE ?? '')
   .split(',')
   .map((name) => name.trim())
@@ -110,6 +109,10 @@ for (const name of required)
     process.exit(1)
   }
 const isRequired = (name) => required.includes('all') || required.includes(name)
+const selected = Object.keys(compositions).filter(
+  (name) =>
+    requested.length === 0 || requested.includes(name) || isRequired(name),
+)
 
 // The stamp makes an initial commit; CI runners have no git identity. These
 // only fill the gap — a configured identity or existing env still wins.

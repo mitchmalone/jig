@@ -2,6 +2,16 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-11-21 — Code Agent covers every agent; agreement promotes an item; Fable for hard tasks
+
+The backlog's agent owner is `Code Agent` alone, standing for every agent: the owner's orchestrating agent (Beebee) running a session, its subagents, or Claude Code run locally by a person. `Beebee` is gone from the Notion Owner options and from `OWNERS`. When the owner of the backlog agrees in a session that an agent takes an item, the agent reassigns it to `Code Agent` and makes it `Ready` itself; that agreement is the promotion. Agreement is the owner of the backlog explicitly telling the agent, in the session, to take that named item; it covers items in `Triage`, `Todo`, `Scheduled` or `Ready`, never one `In Progress`. Subagents run on Opus by default and Fable (`model: "fable"`) for hard tasks.
+
+Projects already stamped (Wriker, for one) keep the old `OWNERS`, with `Beebee`, and the old `/session-start` until they are reconciled. The shared Notion database no longer has that option, so a stamped script's `--owner Beebee` must not be used meanwhile.
+
+Context: Mitch's orchestrating agent runs sessions and delegates. `start` refused any owner but `Code Agent` or none, and set the owner to `Code Agent`, so a separate `Beebee` owner could not be started. Mitch decided one agent label is enough.
+
+Reasoning: who ran a session is already in its handoff, so a second agent label on the item says nothing new and would need the script to learn it. Keeping the refusal of a person's item in `start`, even with `--force`, keeps a session from taking work nobody handed over; the agreed path is one explicit `set`, which the backlog shows.
+
 ## 2026-11-21 — Working state moves out of the repo: Notion backlog, Board handoffs and learnings, two session commands
 
 `STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` are retired. Work items live in one shared Notion database (The Backlog, each item related to its project). Session handoffs and learnings live on the Vercel Board, one channel per repo. A session's plan and its copy of both live in gitignored `local/session/`. `/session-start` and `/session-end` are stamped into every project and drive a stamped, zero-dependency `scripts/session.mjs`. `DECISIONS.md` stays in the repo. Public repos add a curated `docs/LEARNINGS.md`. The `board-ops` repo of Board conventions is folded into the standard.
