@@ -1,0 +1,779 @@
+#!/usr/bin/env node
+// The session script: the fixed, every-session operations against the three
+// stores a project keeps its working state in.
+//
+//   Notion (The Backlog)  work items            via `ntn`
+//   Vercel Board          handoffs, learnings   via `vercel board`
+//   local/session/        this session's copy   gitignored, removed on close
+//
+//   node scripts/session.mjs pull
+//   node scripts/session.mjs start <item-id> [--force]
+//   node scripts/session.mjs set <item-id> [--status S] [--owner O] [--pr URL]
+//   node scripts/session.mjs raise "<title>" [--owner O] [--status S] [--file body.md]
+//   node scripts/session.mjs learn "<headline>" [--topic word] [--file body.md]
+//   node scripts/session.mjs close --file handoff.md --state <state> [--pr N] [--blocked kind]
+//   node scripts/session.mjs discard [--force]
+//
+// Settings come from session.config.json at the repo root. Zero dependencies.
+// Exit codes: 0 ok, 1 failed, 2 an earlier session was never closed.
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+export class SessionError extends Error {}
+
+const fail = (message) => {
+  throw new SessionError(message)
+}
+
+const COMMANDS = ['pull', 'start', 'set', 'raise', 'learn', 'close', 'discard']
+// Open work first: what is in flight, then what may start, then the rest.
+const STATUSES = [
+  'In Progress',
+  'In Review',
+  'Blocked',
+  'Ready',
+  'Scheduled',
+  'Todo',
+  'Triage',
+  'Done',
+]
+// The backlog's Owner options. A fork with other people edits these two.
+const OWNERS = ['Mitch', 'Beebee', 'Code Agent']
+const AGENT = 'Code Agent'
+const STATES = ['active', 'paused', 'waiting', 'review', 'done']
+const BLOCKERS = ['decision', 'external', 'access']
+const HEADINGS = ['**Changed:**', '**Half-done:**', '**Next:**']
+// One channel read returns at most this many threads.
+const LEARNING_LIMIT = 500
+const NOTION_ID =
+  /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+
+// --- arguments ---------------------------------------------------------------
+
+const VALUE_FLAGS = [
+  '--status',
+  '--owner',
+  '--pr',
+  '--file',
+  '--topic',
+  '--state',
+  '--blocked',
+]
+const SWITCHES = ['--force']
+
+function parseArgs(argv) {
+  const positional = []
+  const flags = {}
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (VALUE_FLAGS.includes(arg)) {
+      const value = argv[++i]
+      // A flag is never a value: `--pr --status Done` is a forgotten URL.
+      if (value === undefined || value.startsWith('--'))
+        fail(`${arg} needs a value`)
+      flags[arg.slice(2)] = value
+    } else if (SWITCHES.includes(arg)) flags[arg.slice(2)] = true
+    else if (arg.startsWith('--')) fail(`unknown option: ${arg}`)
+    else positional.push(arg)
+  }
+  return { positional, flags }
+}
+
+const oneOf = (value, allowed, what) =>
+  allowed.includes(value)
+    ? value
+    : fail(`unknown ${what} "${value}" (have: ${allowed.join(', ')})`)
+
+// The id goes into an API path, so it has to be an id and nothing else.
+const pageId = (id, command) =>
+  !id
+    ? fail(`${command} needs an item id`)
+    : NOTION_ID.test(id)
+      ? id
+      : fail(`"${id}" is not a Notion page id`)
+
+// --- the two CLIs ------------------------------------------------------------
+
+// Runs a command and returns its stdout. A failure carries everything the
+// command printed: the Board CLI reports errors as JSON on stdout, with
+// nothing on stderr.
+export function defaultRun(command, args, { input } = {}) {
+  try {
+    return execFileSync(command, args, {
+      input,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      maxBuffer: 64 * 1024 * 1024,
+    })
+  } catch (error) {
+    if (error.code === 'ENOENT')
+      throw new Error(`${command} is not installed`, { cause: error })
+    const printed = [error.stderr, error.stdout]
+      .map((stream) => String(stream ?? '').trim())
+      .filter(Boolean)
+      .join('\n')
+    throw new Error(printed || error.message, { cause: error })
+  }
+}
+
+// JSON, or JSON after banner lines. Undefined when there is none.
+function parseJson(output) {
+  const text = output.trim()
+  const lines = text.split('\n')
+  const start = lines.findIndex((line) => /^\s*[{[]/.test(line))
+  for (const candidate of [text, lines.slice(Math.max(start, 0)).join('\n')])
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      // not this one
+    }
+  return undefined
+}
+
+// The short form of a CLI failure: its `reason` and `message` when it printed
+// JSON, otherwise its first lines.
+function reason(error) {
+  const report = parseJson(error.message)
+  if (report?.reason) return `${report.reason}: ${report.message ?? ''}`.trim()
+  return error.message.split('\n').slice(0, 5).join(' ')
+}
+
+function createStores(config, run) {
+  const { scope, channel, profile } = config.board
+
+  // `call` runs a CLI and reads its answer. A read that does not parse is a
+  // failure. A write that ran but whose answer does not parse still happened,
+  // so it is never reported as failed: a retry would do it twice.
+  const call = (store, command, args, { isWrite, ...options } = {}) => {
+    let output
+    try {
+      output = run(command, args, options)
+    } catch (error) {
+      error.store = store
+      throw error
+    }
+    const answer = parseJson(output)
+    if (answer === undefined && !isWrite)
+      fail(`${store} answered with something that is not JSON`)
+    return answer ?? {}
+  }
+
+  const notion = (args, options) => {
+    try {
+      return call('Notion', 'ntn', ['api', ...args], options)
+    } catch (error) {
+      if (error instanceof SessionError) throw error
+      return fail(`Notion did not answer (${reason(error)})`)
+    }
+  }
+
+  // `--scope` on every command: with none, the CLI resolves the board from
+  // whichever team the checkout is linked to, or refuses when not linked.
+  const board = (args, options) => {
+    try {
+      return call(
+        'Board',
+        'vercel',
+        ['board', ...args, '--json', '--scope', scope],
+        options,
+      )
+    } catch (error) {
+      if (error instanceof SessionError) throw error
+      // A channel exists from its first post; before that, reads fail.
+      if (args[0] === 'read' && error.message.includes('channel_not_found'))
+        return { threads: [], isMissing: true }
+      return fail(`Board did not answer (${reason(error)})`)
+    }
+  }
+
+  const queryAll = (dataSource, query) => {
+    const pages = []
+    let cursor
+    do {
+      const page = notion([
+        `v1/data_sources/${dataSource}/query`,
+        '-d',
+        JSON.stringify({
+          page_size: 100,
+          ...query,
+          ...(cursor && { start_cursor: cursor }),
+        }),
+      ])
+      pages.push(...(page.results ?? []))
+      cursor = page.has_more ? page.next_cursor : undefined
+    } while (cursor)
+    return pages
+  }
+
+  return {
+    // The backlog's Project is a relation to a projects database (or, in a
+    // simpler backlog, a select). Either way the config holds the name; this
+    // turns it into the filter that finds the project's items and the value
+    // that files a new one under it.
+    project() {
+      const name = config.backlog.project.trim()
+      const property = notion([`v1/data_sources/${config.backlog.dataSource}`])
+        .properties?.Project
+      if (property?.type === 'select')
+        return { filter: { select: { equals: name } }, value: select(name) }
+      if (property?.type !== 'relation')
+        fail(
+          'the backlog has no Project property that is a relation or a select',
+        )
+      const projects = queryAll(property.relation.data_source_id, {})
+      const named = (matches) =>
+        projects.filter((page) => matches(titleOf(page).trim()))
+      const exact = named((title) => title === name)
+      const matches =
+        exact.length > 0
+          ? exact
+          : named((title) => title.toLowerCase() === name.toLowerCase())
+      if (matches.length === 0)
+        fail(
+          `"${name}" is not in the projects database the backlog's Project points to: add it there, then run this again`,
+        )
+      if (matches.length > 1)
+        fail(
+          `more than one project is named "${name}" in the projects database: rename one`,
+        )
+      return {
+        filter: { relation: { contains: matches[0].id } },
+        value: { relation: [{ id: matches[0].id }] },
+      }
+    },
+    backlog(project) {
+      return queryAll(config.backlog.dataSource, {
+        filter: {
+          and: [
+            { property: 'Project', ...project.filter },
+            { property: 'Status', select: { does_not_equal: 'Done' } },
+          ],
+        },
+      }).map(toItem)
+    },
+    item: (id) => toItem(notion([`v1/pages/${id}`])),
+    update: (id, properties) =>
+      notion(
+        [`v1/pages/${id}`, '-X', 'PATCH', '-d', JSON.stringify({ properties })],
+        { isWrite: true },
+      ),
+    create: (properties) =>
+      notion(
+        [
+          'v1/pages',
+          '-d',
+          JSON.stringify({
+            parent: {
+              type: 'data_source_id',
+              data_source_id: config.backlog.dataSource,
+            },
+            properties,
+          }),
+        ],
+        { isWrite: true },
+      ),
+    body(id, markdown) {
+      try {
+        run('ntn', ['pages', 'update', id, '--content', markdown])
+      } catch (error) {
+        fail(`Notion did not take the page body (${reason(error)})`)
+      }
+    },
+    // The channel's threads, and whether the channel exists yet.
+    read(...filters) {
+      const answer = board(['read', channel, ...filters])
+      return { threads: answer.threads ?? [], isMissing: !!answer.isMissing }
+    },
+    thread: (id) => board(['read', id]),
+    // The key makes a retry of the same text post once, not twice.
+    post: (text, labels) =>
+      board(
+        [
+          'post',
+          channel,
+          '--file',
+          '-',
+          ...Object.entries(labels).flatMap(([key, value]) => [
+            '--label',
+            `${key}=${value}`,
+          ]),
+          '--as',
+          profile,
+          '--idempotency-key',
+          createHash('sha256')
+            .update(`${channel}\n${labels.kind}\n${text}`)
+            .digest('hex')
+            .slice(0, 40),
+        ],
+        { input: text, isWrite: true },
+      ),
+  }
+}
+
+// --- shaping -----------------------------------------------------------------
+
+// A page's title, whatever its title property is called.
+function titleOf(page) {
+  const title = Object.values(page.properties ?? {}).find(
+    (property) => property.type === 'title' || property.title,
+  )
+  return (title?.title ?? [])
+    .map((part) => part.plain_text ?? part.text?.content ?? '')
+    .join('')
+}
+
+function toItem(page) {
+  const properties = page.properties ?? {}
+  return {
+    id: page.id,
+    url: page.url ?? '',
+    dataSource: page.parent?.data_source_id ?? '',
+    name: titleOf(page),
+    status: properties.Status?.select?.name ?? '',
+    owner: properties.Owner?.select?.name ?? '',
+    pr: properties['PR Link']?.url ?? '',
+  }
+}
+
+const select = (name) => ({ select: { name } })
+
+const isStartable = (item) =>
+  item.status === 'Ready' && (item.owner === '' || item.owner === AGENT)
+
+const firstLine = (text) => text.split('\n')[0].trim()
+
+function renderBacklog(items, config, pulledAt) {
+  const lines = [
+    `# Backlog — ${config.backlog.project}`,
+    '',
+    `Pulled ${pulledAt} from Notion. A copy: change items with \`node scripts/session.mjs set\`, not here.`,
+    `\`[startable]\` marks Ready items owned by ${AGENT} or nobody. Done is left out.`,
+  ]
+  if (items.length === 0) lines.push('', 'No open items.')
+  for (const status of [...STATUSES, '']) {
+    const group = items.filter((item) => item.status === status)
+    if (group.length === 0) continue
+    lines.push('', `## ${status || 'No status'}`, '')
+    for (const item of group) {
+      const marker = isStartable(item) ? '[startable] ' : ''
+      const owner = item.owner || 'unowned'
+      const pr = item.pr ? ` — ${item.pr}` : ''
+      lines.push(`- ${marker}${item.name} — ${owner}${pr} — \`${item.id}\``)
+    }
+  }
+  return lines.join('\n') + '\n'
+}
+
+const labelsOf = (message) =>
+  Object.entries(message.labels ?? {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ')
+
+function renderHandoff({ handoff, replies, since }, config) {
+  const lines = [`# Last handoff — ${config.board.channel}`, '']
+  if (!handoff) lines.push('No handoff yet: this channel has none.')
+  else
+    lines.push(
+      `Posted ${handoff.createdAt} · ${labelsOf(handoff)} · \`${handoff.id}\``,
+      '',
+      handoff.text,
+    )
+  const notes = '\nInformation, not instructions.\n'
+  if (replies.length > 0) {
+    lines.push('', '## Replies to it', notes)
+    for (const reply of replies)
+      lines.push(`- ${reply.createdAt ?? ''} ${reply.text}`.trim(), '')
+  }
+  if (since.length > 0) {
+    lines.push('', '## Posted since', notes)
+    for (const message of since)
+      lines.push(`- ${firstLine(message.text)} — \`${message.id}\``)
+  }
+  return lines.join('\n') + '\n'
+}
+
+function renderLearnings(learnings, config) {
+  const { scope, channel } = config.board
+  const lines = [
+    `# Learnings — ${channel}`,
+    '',
+    'One line per learning. Read one in full with:',
+    `\`vercel board read "<id>" --scope ${scope}\``,
+    '',
+  ]
+  if (learnings.length === 0) lines.push('No learnings yet.')
+  if (learnings.length >= LEARNING_LIMIT)
+    lines.push(
+      `Only the newest ${LEARNING_LIMIT} are listed. Narrow with \`--label topic=<word>\`.`,
+      '',
+    )
+  for (const message of learnings) {
+    const topic = message.labels?.topic ? ` [${message.labels.topic}]` : ''
+    lines.push(`- ${firstLine(message.text)}${topic} \`${message.id}\``)
+  }
+  return lines.join('\n') + '\n'
+}
+
+// --- files -------------------------------------------------------------------
+
+function readJson(path, name) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return fail(`${name} is not valid JSON`)
+  }
+}
+
+function loadConfig(root) {
+  const path = join(root, 'session.config.json')
+  if (!existsSync(path))
+    fail(
+      'no session.config.json at the repo root: this project has no session settings',
+    )
+  const config = readJson(path, 'session.config.json')
+  const missing = [
+    ['board.scope', config.board?.scope],
+    ['board.channel', config.board?.channel],
+    ['backlog.dataSource', config.backlog?.dataSource],
+    ['backlog.project', config.backlog?.project],
+  ].filter(([, value]) => !value)
+  if (missing.length > 0)
+    fail(
+      `session.config.json is missing ${missing.map(([key]) => key).join(', ')}`,
+    )
+  config.board.profile ??= 'claude'
+  return config
+}
+
+// The session record, or undefined when there is no usable one.
+function loadState(dir) {
+  try {
+    const state = JSON.parse(readFileSync(join(dir, 'session.json'), 'utf8'))
+    if (typeof state?.startedAt !== 'string') return undefined
+    return {
+      startedAt: state.startedAt,
+      claimed: Array.isArray(state.claimed) ? state.claimed : [],
+      written: Array.isArray(state.written) ? state.written : [],
+    }
+  } catch {
+    return undefined
+  }
+}
+
+const requireState = (dir) =>
+  loadState(dir) ??
+  fail('no session here: run `node scripts/session.mjs pull` first')
+
+const saveState = (dir, state) =>
+  writeFileSync(
+    join(dir, 'session.json'),
+    JSON.stringify(state, null, 2) + '\n',
+  )
+
+// Records a write that succeeded, when a session is open. If the close-out is
+// interrupted, the next session reads this instead of repeating the writes.
+function record(dir, entry, change = () => {}) {
+  const state = loadState(dir)
+  if (!state) return
+  state.written.push(entry)
+  change(state)
+  saveState(dir, state)
+}
+
+// Text for the Board or Notion comes only from inside the repo: what a session
+// posts is chosen by an agent that also reads untrusted text.
+function readText(root, file) {
+  const path = resolve(root, file)
+  const fromRoot = relative(root, path)
+  if (fromRoot.startsWith('..') || isAbsolute(fromRoot))
+    fail(`--file must be inside the repo: ${file}`)
+  if (!existsSync(path)) fail(`no such file: ${file}`)
+  return readFileSync(path, 'utf8').trim()
+}
+
+// --- commands ----------------------------------------------------------------
+
+function reportUnclosed(dir, log) {
+  const state = loadState(dir)
+  if (!state)
+    log(
+      'local/session/ has files but no readable session.json: an earlier session was not closed.',
+    )
+  else {
+    log(`Unclosed session from ${state.startedAt} in local/session/.`)
+    if (state.claimed.length > 0) {
+      log('It claimed:')
+      for (const item of state.claimed) log(`  - ${item.name} (${item.id})`)
+    }
+    if (state.written.length > 0) {
+      log('It already wrote (do not repeat these):')
+      for (const entry of state.written) log(`  - ${entry}`)
+    }
+  }
+  log(
+    'Close it (`close`) or drop it (`discard`) before pulling again. Nothing was fetched.',
+  )
+  return 2
+}
+
+function pull({ dir, config, stores, now, log }) {
+  if (existsSync(dir) && readdirSync(dir).length > 0)
+    return reportUnclosed(dir, log)
+
+  // Fetch everything before writing anything: a half-written reference would
+  // pass for a whole one.
+  const items = stores.backlog(stores.project())
+
+  // The board lists threads by latest activity, so a replied-to handoff can
+  // sort ahead of a newer one: take a few and pick by creation time.
+  const handoffs = stores.read('--label', 'kind=handoff', '--limit', '5')
+  const handoff = handoffs.threads
+    .map((thread) => thread.message)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
+  const learnings = stores
+    .read('--label', 'kind=learning', '--limit', String(LEARNING_LIMIT))
+    .threads.map((thread) => thread.message)
+  // What people and other sessions wrote after the handoff: replies in its
+  // thread, and new threads that are not handoffs, learnings or tasks.
+  const replies = handoff ? (stores.thread(handoff.id).replies ?? []) : []
+  const recent = handoff
+    ? stores.read('--after', handoff.id, '--limit', '50')
+    : stores.read('--limit', '50')
+  const since = recent.threads
+    .map((thread) => thread.message)
+    .filter(
+      (message) =>
+        message.id !== handoff?.id &&
+        !message.labels?.kind &&
+        !message.labels?.['board.task'],
+    )
+
+  const startedAt = now().toISOString()
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, 'backlog.md'),
+    renderBacklog(items, config, startedAt),
+  )
+  writeFileSync(
+    join(dir, 'handoff.md'),
+    renderHandoff({ handoff, replies, since }, config),
+  )
+  writeFileSync(join(dir, 'learnings.md'), renderLearnings(learnings, config))
+  saveState(dir, { startedAt, claimed: [], written: [] })
+
+  const startable = items.filter(isStartable).length
+  log(
+    `Pulled ${items.length} open items (${startable} startable) and ${learnings.length} learnings into local/session/.`,
+  )
+  if (handoffs.isMissing)
+    log(
+      `The board has no "${config.board.channel}" channel yet: a new project, or a wrong name in session.config.json.`,
+    )
+  else log(handoff ? `Last handoff: ${handoff.createdAt}.` : 'No handoff yet.')
+  return 0
+}
+
+function start({ dir, config, stores, log }, [rawId], flags) {
+  const id = pageId(rawId, 'start')
+  requireState(dir)
+  // Read the live item, not the snapshot: another session may have taken it
+  // since the pull. In Progress is the lock. The check and the write are two
+  // calls, so two sessions starting the same item within the same second can
+  // both succeed; one session per project is the norm that makes this enough.
+  const item = stores.item(id)
+  if (item.dataSource && item.dataSource !== config.backlog.dataSource)
+    fail(`"${item.name}" is not in this project's backlog`)
+  if (!flags.force) {
+    if (item.status !== 'Ready')
+      fail(
+        `"${item.name}" is ${item.status || 'without a status'}, not Ready. Another session may hold it; ask, then use --force.`,
+      )
+    if (item.owner && item.owner !== AGENT)
+      fail(`"${item.name}" belongs to ${item.owner}, not to ${AGENT}.`)
+  }
+  stores.update(id, { Status: select('In Progress'), Owner: select(AGENT) })
+  record(dir, `start ${id}: ${item.name}`, (state) => {
+    if (!state.claimed.some((claim) => claim.id === id))
+      state.claimed.push({ id, name: item.name })
+  })
+  log(`Started "${item.name}".`)
+  return 0
+}
+
+function set({ dir, stores, log }, [rawId], flags) {
+  const id = pageId(rawId, 'set')
+  if (flags.status === 'In Progress')
+    fail('In Progress is the lock: take it with `start`, which checks it first')
+  const changes = [
+    flags.status && ['Status', oneOf(flags.status, STATUSES, 'status')],
+    flags.owner && ['Owner', oneOf(flags.owner, OWNERS, 'owner')],
+    flags.pr && ['PR Link', flags.pr],
+  ].filter(Boolean)
+  if (changes.length === 0)
+    fail('set needs at least one of --status, --owner, --pr')
+  stores.update(
+    id,
+    Object.fromEntries(
+      changes.map(([name, value]) => [
+        name,
+        name === 'PR Link' ? { url: value } : select(value),
+      ]),
+    ),
+  )
+  const summary = changes.map(([name, value]) => `${name}=${value}`).join(', ')
+  record(dir, `set ${id}: ${summary}`)
+  log(`Updated ${id}: ${summary}.`)
+  return 0
+}
+
+function raise({ root, dir, stores, log }, [title], flags) {
+  if (!title) fail('raise needs a title')
+  const status = oneOf(flags.status ?? 'Triage', STATUSES, 'status')
+  const properties = {
+    Name: { title: [{ text: { content: title } }] },
+    Project: stores.project().value,
+    Status: select(status),
+    ...(flags.owner && { Owner: select(oneOf(flags.owner, OWNERS, 'owner')) }),
+  }
+  const body = flags.file && readText(root, flags.file)
+  const created = stores.create(properties)
+  record(dir, `raise ${created.id ?? '(no id returned)'}: ${title} [${status}]`)
+  if (!created.id) {
+    log(
+      `Raised "${title}", but Notion returned no id: check the backlog before raising it again.`,
+    )
+    return 0
+  }
+  if (body) stores.body(created.id, body)
+  log(`Raised "${title}": ${created.id} ${created.url ?? ''}`.trim())
+  return 0
+}
+
+function learn({ root, dir, stores, log }, [headline], flags) {
+  if (!headline) fail('learn needs a headline')
+  if (headline.includes('\n'))
+    fail('the headline must be one line: it is the index entry')
+  const body = flags.file && readText(root, flags.file)
+  const posted = stores.post(body ? `${headline}\n\n${body}` : headline, {
+    kind: 'learning',
+    ...(flags.topic && { topic: flags.topic }),
+  })
+  record(dir, `learn ${posted.id ?? ''}: ${headline}`)
+  log(`Posted learning ${posted.id ?? ''}`.trim())
+  return 0
+}
+
+// Claimed items the session is leaving In Progress. Best effort: a handoff
+// must still go out when Notion is down.
+function stillLocked(state, stores) {
+  try {
+    return state.claimed.filter(
+      (claim) => stores.item(claim.id).status === 'In Progress',
+    )
+  } catch (error) {
+    if (!(error instanceof SessionError)) throw error
+    return undefined
+  }
+}
+
+function close({ root, dir, stores, log }, _positional, flags) {
+  if (!flags.file) fail('close needs --file <handoff.md>')
+  const state = oneOf(flags.state ?? '', STATES, 'state')
+  if (flags.blocked) oneOf(flags.blocked, BLOCKERS, 'blocker')
+  const session = requireState(dir)
+  const text = readText(root, flags.file)
+  const missing = HEADINGS.filter((heading) => !text.includes(heading))
+  if (missing.length > 0) fail(`the handoff is missing ${missing.join(', ')}`)
+
+  const locked = stillLocked(session, stores)
+  const posted = stores.post(text, {
+    kind: 'handoff',
+    state,
+    ...(flags.pr && { pr: flags.pr }),
+    ...(flags.blocked && { blocked: flags.blocked }),
+  })
+  // Only now: a failed post above has thrown and left the reference in place.
+  rmSync(dir, { recursive: true, force: true })
+  log(`Posted handoff ${posted.id ?? ''}`.trim())
+  log('Removed local/session/.')
+  if (locked === undefined)
+    log('Could not check whether claimed items are still In Progress.')
+  else if (locked.length > 0) {
+    log('Left still In Progress, which keeps other sessions off them:')
+    for (const item of locked) log(`  - ${item.name} (${item.id})`)
+  }
+  return 0
+}
+
+function discard({ dir, log }, _positional, flags) {
+  const claimed = loadState(dir)?.claimed ?? []
+  const list = claimed.map((item) => `  - ${item.name} (${item.id})`)
+  if (claimed.length > 0 && !flags.force)
+    fail(
+      [
+        'this session claimed items that are still In Progress in the backlog:',
+        ...list,
+        'Set each to where it stands (`set <id> --status Ready`), or pass --force to drop the session anyway.',
+      ].join('\n'),
+    )
+  rmSync(dir, { recursive: true, force: true })
+  log('Removed local/session/.')
+  if (claimed.length > 0) {
+    log('These stay In Progress in the backlog until someone changes them:')
+    for (const line of list) log(line)
+  }
+  return 0
+}
+
+const handlers = { pull, start, set, raise, learn, close, discard }
+
+export function main(
+  argv,
+  {
+    root = process.cwd(),
+    run = defaultRun,
+    now = () => new Date(),
+    log = console.log,
+  } = {},
+) {
+  const [command, ...rest] = argv
+  if (!COMMANDS.includes(command))
+    fail(`usage: session.mjs <${COMMANDS.join('|')}> — see the file header`)
+  const { positional, flags } = parseArgs(rest)
+  const dir = join(root, 'local', 'session')
+  if (command === 'discard') return discard({ dir, log }, positional, flags)
+  const config = loadConfig(root)
+  const context = {
+    root,
+    dir,
+    config,
+    now,
+    log,
+    stores: createStores(config, run),
+  }
+  return handlers[command](context, positional, flags)
+}
+
+// Run only as a command, not when imported. Compared by real path, so a
+// symlink to this file still runs it.
+const invoked = process.argv[1] && realpathSync(process.argv[1])
+if (invoked === fileURLToPath(import.meta.url)) {
+  try {
+    process.exitCode = main(process.argv.slice(2))
+  } catch (error) {
+    if (!(error instanceof SessionError)) throw error
+    console.error(`error: ${error.message}`)
+    process.exitCode = 1
+  }
+}

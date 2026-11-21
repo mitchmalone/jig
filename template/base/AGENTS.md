@@ -8,9 +8,14 @@
 
 This project was stamped from the [jig](https://github.com/mitchmalone/jig). Its standard lives **in this repo** at `docs/STANDARDS.md` (vendored at stamp time) — that copy governs; do not consult or "upgrade to" the jig's current version mid-task. This file carries **deltas only** — identity, stack, invariants — never restatements. Divergences live in `DEVIATIONS.md` with a justification. Refreshing `docs/STANDARDS.md` from the jig is a deliberate reconciliation, done as its own change.
 
-## Docs system
+## Sessions
 
-Living state is in `docs/` — see the standard for roles and discipline. Session protocol: orient on `docs/STATUS.md` and `docs/plans/active/` → plan before non-trivial work → record decisions/gotchas as they happen → close out docs in the same commit as the code.
+Working state lives outside the repo — see the standard for roles and discipline. Start every session with `/session-start` and end it with `/session-end`; both drive `scripts/session.mjs`, and `session.config.json` holds the pointers below.
+
+- **Backlog:** Notion, The Backlog, `Project` = `{{PROJECT_TITLE}}`.
+- **Handoffs and learnings:** Vercel Board, team `{{BOARD_SCOPE}}`, channel `{{PROJECT_NAME}}`.
+- **Decisions:** `docs/DECISIONS.md`, in the commit that makes them.
+- **This session's copy:** `local/session/` (gitignored).
 
 ## Stack
 
@@ -38,7 +43,7 @@ Living state is in `docs/` — see the standard for roles and discipline. Sessio
 | e.g. idle memory             | < 120 MB ceiling        |
 
 A budget miss cuts or flags the offending feature. Measure before claiming;
-record numbers in the plan file or JOURNAL. Release notes carry a
+record numbers in the PR and as a learning. Release notes carry a
 "Performance receipts" table; the release gate refuses while `_ ms`/`_ MB`
 placeholders remain. -->
 
@@ -53,4 +58,5 @@ placeholders remain. -->
 
 - `{{PM_RUN}} verify` green.
 - New behavior has tests, written first (red/green/refactor).
-- `docs/STATUS.md` updated and the plan moved to `done/` in the same commit.
+- Decisions recorded in `docs/DECISIONS.md` in the same commit.
+- The backlog item is `In Review` with its PR link; `/session-end` closes the session out.

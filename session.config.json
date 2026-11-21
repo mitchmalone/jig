@@ -1,0 +1,7 @@
+{
+  "board": { "scope": "ramenamok", "channel": "jig", "profile": "claude" },
+  "backlog": {
+    "dataSource": "41f3d7d1-79ad-8045-a361-000b56ae7f12",
+    "project": "Jig"
+  }
+}
