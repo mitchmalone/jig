@@ -295,9 +295,14 @@ describe('session system', () => {
     )
   })
 
-  it('keeps the session script beside the Swift flavor scripts', () => {
+  // Stamping Swift runs swift-format, which only a Mac has.
+  it(
+    'keeps the session script beside the Swift flavor scripts',
+    { skip: !isMac },
+    () => {
     const dir = stampOk('my-thing', ['--flavors', 'desktop-swift'])
     assert.ok(existsSync(join(dir, 'scripts/session.mjs')))
     assert.ok(existsSync(join(dir, 'scripts/xcode.mjs')))
-  })
+    },
+  )
 })
