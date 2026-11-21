@@ -1,6 +1,6 @@
 ---
 title: Session system — Board, Notion backlog, /session-start and /session-end
-status: active
+status: done
 created: 2026-11-21
 updated: 2026-11-21
 links: []
@@ -48,7 +48,7 @@ Decisions stay in the repo because the Board has no search and no versioning, an
 
 ### Notion: The Backlog
 
-One shared database (`collection://41f3d7d1-79ad-8045-a361-000b56ae7f12`), used as it is. No new properties; each project adds its own `Project` option.
+One shared database (`collection://41f3d7d1-79ad-8045-a361-000b56ae7f12`), used as it is. No new properties. `Project` is a relation to the Mitch Malone Projects database (it was a select when this plan was written and changed during the build); the script resolves the project by name, so its entry must exist there.
 
 - **Startable pool:** `Ready` items whose Owner is `Code Agent` or empty. A session never picks up Mitch's or Beebee's items.
 - **No priority.** The agent recommends from the pool using the last handoff and item dependencies; Mitch decides in discussion.
@@ -83,12 +83,12 @@ One zero-dependency Node script, stamped into every project, wrapping `ntn` and 
 | Command | Does |
 | --- | --- |
 | `pull` | Writes the local reference. Reports a leftover `local/session/` instead of overwriting it |
-| `start <item>` | Sets `In Progress` and Owner `Code Agent`, records the claim locally |
-| `learn` | Posts a `kind=learning` thread |
-| `raise <title>` | Creates a `Triage` item |
-| `review <item> --pr <url>` | Sets `In Review` and the PR Link |
-| `done <item>` | Sets `Done` |
-| `close --file <handoff> --state <state>` | Posts the handoff, then removes `local/session/` only if every write succeeded |
+| `start <item>` | Re-reads the live item, sets `In Progress` and Owner `Code Agent`, records the claim locally |
+| `set <item>` | Sets Status, Owner or PR Link (review, done, blocked) |
+| `raise <title>` | Creates an item, `Triage` unless told otherwise |
+| `learn <headline>` | Posts a `kind=learning` thread |
+| `close --file <handoff> --state <state>` | Posts the handoff, then removes `local/session/` only if the post succeeded |
+| `discard` | Removes `local/session/` without writing anywhere |
 
 The Notion MCP connector remains for work that needs judgement, such as reading a page body in depth.
 
@@ -126,21 +126,22 @@ Working rules the command sets:
 
 ## Steps
 
-- [ ] Record the decision in `docs/DECISIONS.md`; rewrite the standard's docs, session, done and discipline sections.
-- [ ] `scripts/session.mjs`, tests first (`node --test`): filter and payload building, snapshot rendering, leftover detection, close refusing to delete on a failed write.
-- [ ] `/session-start` and `/session-end` skills in `template/base/_claude/skills/`.
-- [ ] Template: remove `STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` from `template/base/docs/`; add the settings file, the script and the skills; rewrite the stamped `AGENTS.md` session block; update the generator's flags and its "next steps" output.
-- [ ] `public` layer: `docs/LEARNINGS.md` and the matching lines in `CONTRIBUTING.md`.
-- [ ] Smoke stamps green for the pnpm, Bun and Swift compositions.
-- [ ] README: usage and the "Docs are state" principle.
-- [ ] Dogfood: move the jig's own roadmap and status items to Notion (`Project` = `Jig`), its journal to the `jig` channel as learning threads, post a first handoff, then delete the retired files and this plan.
+- [x] Record the decision in `docs/DECISIONS.md`; rewrite the standard's docs, session, done and discipline sections.
+- [x] `scripts/session.mjs`, tests first (`node --test`).
+- [x] `/session-start` and `/session-end` skills in `template/base/_claude/skills/`.
+- [x] Template: retired docs removed; settings file, script and skills added; stamped `AGENTS.md` session block; generator flags `--board-scope` and `--backlog`.
+- [x] `public` layer: `docs/LEARNINGS.md` and the matching line in `CONTRIBUTING.md`.
+- [x] Smoke stamps green for the pnpm, Bun and Swift compositions.
+- [x] README: usage, machine setup, and the principle.
+- [x] Fold `board-ops` into the standard (labels, rules) and the README (setup). Mitch deletes the folder.
+- [ ] Dogfood: not done. The jig stays on its in-repo docs because it has no entry in the projects database (DECISIONS 2026-11-21). Its journal was copied to the `jig` channel as 48 learnings.
 
 ## Acceptance criteria
 
-- A fresh stamp contains the two skills, the script and the settings file, contains none of the retired docs, and passes `verify`.
-- `session.mjs pull` in a project writes the four reference files from live Notion and Board data, and fails loudly when either is unreachable.
-- `close` leaves `local/session/` in place when a write fails.
-- In the jig itself: `/session-start` produces a recommendation from The Backlog, and `/session-end` leaves a handoff on the Board, updated items in Notion and no `local/session/`.
+- [x] A fresh stamp contains the two skills, the script and the settings file, contains none of the retired docs, and passes `verify`.
+- [x] `session.mjs pull` writes the reference files from live Notion and Board data (run against Wriker), and fails loudly when either is unreachable (tests).
+- [x] `close` leaves `local/session/` in place when a write fails (tests).
+- [ ] A whole `/session-start` → `/session-end` round trip in a real project. Carried to STATUS "Next": Wriker's first session.
 
 ## Out of scope
 
@@ -156,4 +157,3 @@ Working rules the command sets:
 - **Learning volume.** Scuttler has about 1,400 lines of journal. The index keeps session start cheap, but a channel read returns at most 500 threads; past that the index needs paging or topic labels.
 - **Board is experimental.** Limits and terms may change. `DECISIONS.md` staying in the repo bounds the loss to learnings and handoffs.
 - **`ntn` version.** The script should state the minimum version it was tested against; this machine is well behind current.
-- **Done plans.** The jig's `docs/plans/done/` files are deleted in the dogfood step; git history keeps them.

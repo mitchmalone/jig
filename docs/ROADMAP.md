@@ -18,3 +18,7 @@ Docs skeleton, canonical `AGENTS.md`, base template, core flavors, ci/public lay
 - **Turborepo/Nx, changesets, shared config packages** — trigger: CI wall-time or publishing needs make them earn their place.
 - **Gitleaks in CI for public repos** (the standard says hooks *and* CI; the `public` layer only ships the hook) — trigger: first outside contributor PR on any public jig project, since their machine won't have the hook.
 - **Formatting the template in place** (a Prettier pass over `template/` that understands placeholders) — trigger: a stamp fails `format:check` because of template drift the smoke stamp didn't cover.
+- **Close a session automatically** (a hook that runs the `/session-end` close-out) — trigger: a session is lost without `/session-end` more than once.
+- **A Board profile per session** — trigger: two sessions on one project at once become routine.
+- **Session commands for agents other than Claude Code** — trigger: a second agent does real work in a jig project.
+- **The jig on its own session system** — trigger: a decision on where tooling repos' work items live (the backlog's projects database lists products only).

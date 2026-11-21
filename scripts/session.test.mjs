@@ -605,7 +605,7 @@ describe('as a command', () => {
   })
 
   it('runs when reached through a symlink', () => {
-    // The jig shares the template's copy this way.
+    // A repo may share one copy of the script between checkouts this way.
     const link = join(root, 'session.mjs')
     symlinkSync(script, link)
     const result = spawnSync(process.execPath, [link, 'nonsense'], {
