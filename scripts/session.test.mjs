@@ -112,11 +112,11 @@ const happyRoutes = (overrides = [], schema) => [
     'kind=handoff',
     {
       threads: [
-        thread(
-          'msg_h1',
-          '**Changed:** shipped the live layer\n**Half-done:** nothing\n**Next:** the revoke button',
-          { kind: 'handoff', state: 'paused' },
-        ),
+        // A listing may cut a long message short; the thread has all of it.
+        thread('msg_h1', '**Changed:** shipped the live la…', {
+          kind: 'handoff',
+          state: 'paused',
+        }),
       ],
     },
   ],
@@ -135,7 +135,10 @@ const happyRoutes = (overrides = [], schema) => [
   [
     'board read msg_h1',
     {
-      message: { id: 'msg_h1', text: 'handoff' },
+      message: {
+        id: 'msg_h1',
+        text: '**Changed:** shipped the live layer\n**Half-done:** nothing\n**Next:** the revoke button',
+      },
       replies: [
         {
           id: 'msg_h1_2',
@@ -296,7 +299,10 @@ describe('pull', () => {
         ],
       ]),
     )
-    assert.match(readLocal('handoff.md'), /\*\*Changed:\*\* newest/)
+    assert.match(readLocal('handoff.md'), /Posted 2026-11-20T21:00:00Z/)
+    assert.ok(
+      calls.some((call) => call.line.includes('kind=handoff --limit 100')),
+    )
   })
 
   it('says a silent channel may be a wrong name', () => {
@@ -526,9 +532,15 @@ describe('set', () => {
   it('moves an item to review with its PR link', () => {
     session(
       ['set', '77777777-7777-4777-8777-777777777777', '--status', 'In Review', '--pr', 'https://gh.test/pr/4'],
-      [['pages/77777777-7777-4777-8777-777777777777 -X PATCH', {}]],
+      [
+        ['pages/77777777-7777-4777-8777-777777777777 -X PATCH', {}],
+        [
+          'pages/77777777-7777-4777-8777-777777777777',
+          page('77777777-7777-4777-8777-777777777777', 'An item', 'In Progress'),
+        ],
+      ],
     )
-    const patch = calls[0]
+    const patch = calls.find((call) => call.line.includes('-X PATCH'))
     assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]), {
       properties: {
         Status: { select: { name: 'In Review' } },
@@ -596,10 +608,8 @@ describe('raise', () => {
     assert.deepEqual(properties.Owner, { select: { name: 'Mitch' } })
     assert.deepEqual(properties.Status, { select: { name: 'Blocked' } })
     const body = calls.find((call) => call.line.includes('pages update'))
-    assert.equal(
-      body.args[body.args.indexOf('--content') + 1],
-      'Needs a real device.',
-    )
+    // One argument, so a body that starts with a dash is not read as a flag.
+    assert.ok(body.args.includes('--content=Needs a real device.'))
   })
 })
 
@@ -785,6 +795,7 @@ describe('what a session wrote', () => {
     ])
     session(['set', READY, '--status', 'In Review', '--pr', 'https://gh.test/4'], [
       [`pages/${READY} -X PATCH`, {}],
+      [`pages/${READY}`, page(READY, 'Add the revoke button', 'In Progress')],
     ])
     session(['raise', 'A new bug'], [
       ['v1/pages', { id: NEW }],
@@ -1085,5 +1096,163 @@ describe('running a real command', () => {
       () => defaultRun('definitely-not-a-command-xyz', []),
       /not installed/,
     )
+  })
+})
+
+describe('review round two', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+  const item = (status, owner) => [
+    [`pages/${READY} -X PATCH`, {}],
+    [`pages/${READY}`, page(READY, 'Add the revoke button', status, owner)],
+  ]
+  const claim = () => {
+    session(['pull'])
+    session(['start', READY], item('Ready'))
+  }
+  const claimed = () => JSON.parse(readLocal('session.json')).claimed
+
+  it('releases a claim when the item is set to anything else', () => {
+    claim()
+    session(['set', READY, '--status', 'Ready'], item('In Progress', 'Code Agent'))
+    assert.deepEqual(claimed(), [])
+    assert.equal(session(['discard'], []).code, 0)
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
+  })
+
+  it('lets a session go when its items are no longer In Progress', () => {
+    claim()
+    // Someone moved it in Notion; the local record still lists the claim.
+    const { code } = session(['discard'], item('In Review', 'Code Agent'))
+    assert.equal(code, 0)
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
+  })
+
+  it('still refuses to drop a session whose item is In Progress', () => {
+    claim()
+    assert.throws(
+      () => session(['discard'], item('In Progress', 'Code Agent')),
+      /Add the revoke button/,
+    )
+  })
+
+  it('says there is nothing to discard when there is no session', () => {
+    const { out } = session(['discard'], [])
+    assert.match(out, /no session/i)
+    assert.doesNotMatch(out, /Removed/)
+  })
+
+  it("will not change an item in another project's backlog", () => {
+    const foreign = {
+      ...page(READY, 'Someone else', 'In Progress'),
+      parent: { type: 'data_source_id', data_source_id: 'ds-other' },
+    }
+    assert.throws(
+      () =>
+        session(['set', READY, '--status', 'Done'], [
+          [`pages/${READY} -X PATCH`, {}],
+          [`pages/${READY}`, foreign],
+        ]),
+      /not in this project's backlog/,
+    )
+    assert.equal(
+      calls.some((call) => call.line.includes('-X PATCH')),
+      false,
+    )
+  })
+
+  it('posts a corrected label as a new post, not a repeat of the old one', () => {
+    const key = (topic) => {
+      calls = []
+      session(['learn', 'same text', '--topic', topic], [
+        ['board post', { id: 'm' }],
+      ])
+      const { args } = calls[0]
+      return args[args.indexOf('--idempotency-key') + 1]
+    }
+    assert.notEqual(key('vercel'), key('pnpm'))
+    assert.equal(key('vercel'), key('vercel'))
+  })
+
+  it('reports the thread it posted, whatever shape the answer takes', () => {
+    for (const answer of [
+      { id: 'msg_abc_1' },
+      { message: { id: 'msg_abc_1', text: 'x' } },
+      RAW('Vercel CLI 66.2.0\nmsg_abc_1\n'),
+    ]) {
+      session(['pull'])
+      const { out } = session(['learn', 'a headline'], [['board post', answer]])
+      assert.match(out, /msg_abc_1/)
+      assert.match(
+        JSON.parse(readLocal('session.json')).written[0],
+        /msg_abc_1/,
+      )
+      session(['discard'], [])
+    }
+  })
+
+  describe('--file', () => {
+    it('will not post env or credential files', () => {
+      for (const name of ['.envrc', '.env.local', '.vercel/project.json', 'id.pem']) {
+        mkdirSync(dirname(join(root, name)), { recursive: true })
+        writeFileSync(join(root, name), 'SECRET=1')
+        assert.throws(
+          () => session(['learn', 'x', '--file', name], []),
+          /will not be posted/,
+          name,
+        )
+      }
+      assert.equal(calls.length, 0)
+    })
+
+    it('follows a symlink before deciding a file is inside the repo', () => {
+      const outside = join(scratch, `outside-${counter}.md`)
+      writeFileSync(outside, 'not ours')
+      mkdirSync(join(root, 'local'), { recursive: true })
+      symlinkSync(outside, join(root, 'local', 'link.md'))
+      assert.throws(
+        () => session(['learn', 'x', '--file', 'local/link.md'], []),
+        /inside the repo/,
+      )
+    })
+
+    it('accepts a file whose name merely starts with two dots', () => {
+      writeFileSync(join(root, '..notes.md'), 'fine')
+      session(['learn', 'x', '--file', '..notes.md'], [
+        ['board post', { id: 'm' }],
+      ])
+      assert.equal(calls[0].input, 'x\n\nfine')
+    })
+  })
+
+  describe('from a subdirectory', () => {
+    const script = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../template/base/scripts/session.mjs',
+    )
+    const inSubdirectory = (...args) => {
+      spawnSync('git', ['init', '-q'], { cwd: root })
+      mkdirSync(join(root, 'apps', 'web'), { recursive: true })
+      return spawnSync(process.execPath, [script, ...args], {
+        cwd: join(root, 'apps', 'web'),
+        encoding: 'utf8',
+      })
+    }
+
+    it('works on the repo, not on the directory it was run from', () => {
+      mkdirSync(join(root, 'local', 'session'), { recursive: true })
+      writeFileSync(
+        local('session.json'),
+        JSON.stringify({ startedAt: 'x', claimed: [], written: [] }),
+      )
+      const result = inSubdirectory('discard')
+      assert.equal(result.status, 0, result.stderr)
+      assert.equal(existsSync(join(root, 'local', 'session')), false)
+    })
+
+    it('finds the settings at the repo root', () => {
+      const result = inSubdirectory('set', 'not-an-id', '--status', 'Done')
+      // Past the settings and on to the argument: the settings were found.
+      assert.match(result.stderr, /not a Notion page id/)
+    })
   })
 })

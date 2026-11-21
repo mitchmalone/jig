@@ -34,3 +34,6 @@ Hard-won knowledge a contributor to the jig needs, by topic: symptom â†’ cause â
 - **A script run through a symlink has `import.meta.url` at the real path**, so comparing it to `process.argv[1]` is false and the script silently does nothing. Compare against `realpathSync(process.argv[1])`.
 - **Read the Notion schema; don't assume it.** The backlog's `Project` changed from a select to a relation while the script was being built, and the first live write failed with `Project is expected to be relation`.
 - **A fake that routes commands by substring can pass a test for the wrong reason.** The first version's tests threw errors that already contained the reason text, and so never noticed the real CLI puts it on stdout. Test the runner against a real process too.
+- **Pass a CLI value as one `--flag=value` argument when it can start with a dash.** A Markdown body beginning with `-` or `---` passed after `--content` can be read as an option.
+- **A local record of remote state goes stale.** Claims recorded in `local/session/session.json` were never released, so `discard` refused forever. Release the record on the write that changes the remote, and check the remote live before refusing on it.
+- **Resolve the repo root from git, not the current directory.** Run from a subdirectory, the script reported removing a session that was somewhere else.

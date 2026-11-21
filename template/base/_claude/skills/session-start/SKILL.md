@@ -18,7 +18,7 @@ node scripts/session.mjs pull
   1. Read what the command printed, and `local/session/plan.md` and `close.md` if they exist. "It claimed" lists the items that session holds. "It already wrote" lists every backlog change, new item and learning it got out before it stopped: do not write any of those again.
   2. Check `git status`, `git log` and open PRs to see how far the work got, and tell the user what you found.
   3. Close it the way `/session-end` does, covering only what is not already written: draft, show, write on confirmation, `close` last.
-  4. If the user says it left nothing worth recording, set each claimed item to where it stands (`node scripts/session.mjs set <item-id> --status Ready`), then run `node scripts/session.mjs discard`. `discard` refuses while claims remain, because an item left `In Progress` is locked against every later session.
+  4. If the user says it left nothing worth recording, set each claimed item to where it stands (`node scripts/session.mjs set <item-id> --status Ready`), then run `node scripts/session.mjs discard`. Setting an item's status releases its claim. `discard` refuses only while a claimed item is still `In Progress` in the backlog, because that locks it against every later session.
   5. Pull again.
 - **Exit 1:** Notion or the Board did not answer. Stop and tell the user what failed. Do not start work from memory or from the repo alone: without the backlog you cannot know what another session holds.
 
@@ -72,7 +72,7 @@ Write the plan to `local/session/plan.md`: goal, approach, steps, acceptance cri
 - **Decisions go in `docs/DECISIONS.md`**, in the commit that makes them.
 - **Work you discover but will not do now** becomes a `Triage` item: `node scripts/session.mjs raise "<title>" --file <detail.md>`. Only the user promotes it.
 - **Something only a person can do** (a device check, a secret, a decision): `node scripts/session.mjs raise "<title>" --owner <their name> --status Blocked --file <why.md>`. The owner must be one of the backlog's Owner options.
-- `--file` paths must be inside the repo. Write drafts under `local/`.
+- `--file` paths must be inside the repo, and env or credential files are refused. Write drafts under `local/`.
 - **Subagents.** The main thread plans, reviews and integrates. Give well-specified coding tasks to subagents on Opus (`model: "opus"`). Run parallel items in separate worktrees (`isolation: "worktree"`): one item, one branch, one PR. Keep items serial when one depends on another or when they touch the same migrations, schemas or contracts.
 - **One writer.** Only the main thread runs `scripts/session.mjs` or writes to Notion or the Board. Subagents report back; they do not post.
 - **Approval.** Commit and push to the feature branch freely. Opening the PR is yours: `node scripts/session.mjs set <item-id> --status "In Review" --pr <url>`. Merging the PR and moving an item to `Done` wait for the user.

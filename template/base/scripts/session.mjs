@@ -27,7 +27,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export class SessionError extends Error {}
@@ -166,7 +166,7 @@ function createStores(config, run) {
     const answer = parseJson(output)
     if (answer === undefined && !isWrite)
       fail(`${store} answered with something that is not JSON`)
-    return answer ?? {}
+    return answer ?? { raw: output }
   }
 
   const notion = (args, options) => {
@@ -285,7 +285,8 @@ function createStores(config, run) {
       ),
     body(id, markdown) {
       try {
-        run('ntn', ['pages', 'update', id, '--content', markdown])
+        // One argument: a body that starts with a dash must not read as a flag.
+        run('ntn', ['pages', 'update', id, `--content=${markdown}`])
       } catch (error) {
         fail(`Notion did not take the page body (${reason(error)})`)
       }
@@ -311,8 +312,10 @@ function createStores(config, run) {
           '--as',
           profile,
           '--idempotency-key',
+          // Labels are part of it: the same text re-posted with a corrected
+          // label is a different post.
           createHash('sha256')
-            .update(`${channel}\n${labels.kind}\n${text}`)
+            .update(`${channel}\n${JSON.stringify(labels)}\n${text}`)
             .digest('hex')
             .slice(0, 40),
         ],
@@ -347,6 +350,10 @@ function toItem(page) {
 }
 
 const select = (name) => ({ select: { name } })
+
+// The id of the thread a post made, wherever the CLI's answer carries it.
+const postedId = (answer) =>
+  JSON.stringify(answer).match(/msg_[A-Za-z0-9_-]+/)?.[0] ?? ''
 
 const isStartable = (item) =>
   item.status === 'Ready' && (item.owner === '' || item.owner === AGENT)
@@ -493,12 +500,24 @@ function record(dir, entry, change = () => {}) {
 
 // Text for the Board or Notion comes only from inside the repo: what a session
 // posts is chosen by an agent that also reads untrusted text.
+// Symlinks are followed first, and files that hold secrets are refused even
+// though they are inside.
+const SECRET_FILES =
+  /(^|\/)(\.env[^/]*|\.envrc|\.infisical[^/]*|\.npmrc|\.netrc|[^/]*\.(pem|key|p12))$|(^|\/)(\.git|\.vercel|\.ssh)\//
+
+const isOutside = (fromRoot) =>
+  fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)
+
 function readText(root, file) {
   const path = resolve(root, file)
-  const fromRoot = relative(root, path)
-  if (fromRoot.startsWith('..') || isAbsolute(fromRoot))
+  // By name first, then by where it really is.
+  if (isOutside(relative(root, path)))
     fail(`--file must be inside the repo: ${file}`)
   if (!existsSync(path)) fail(`no such file: ${file}`)
+  const fromRoot = relative(realpathSync(root), realpathSync(path))
+  if (isOutside(fromRoot)) fail(`--file must be inside the repo: ${file}`)
+  if (SECRET_FILES.test(fromRoot.split(sep).join('/')))
+    fail(`${file} looks like it holds secrets and will not be posted`)
   return readFileSync(path, 'utf8').trim()
 }
 
@@ -536,8 +555,8 @@ function pull({ dir, config, stores, now, log }) {
   const items = stores.backlog(stores.project())
 
   // The board lists threads by latest activity, so a replied-to handoff can
-  // sort ahead of a newer one: take a few and pick by creation time.
-  const handoffs = stores.read('--label', 'kind=handoff', '--limit', '5')
+  // sort ahead of a newer one: take many and pick by creation time.
+  const handoffs = stores.read('--label', 'kind=handoff', '--limit', '100')
   const handoff = handoffs.threads
     .map((thread) => thread.message)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
@@ -546,7 +565,10 @@ function pull({ dir, config, stores, now, log }) {
     .threads.map((thread) => thread.message)
   // What people and other sessions wrote after the handoff: replies in its
   // thread, and new threads that are not handoffs, learnings or tasks.
-  const replies = handoff ? (stores.thread(handoff.id).replies ?? []) : []
+  // The thread also has the handoff's whole text, where a listing may not.
+  const thread = handoff ? stores.thread(handoff.id) : {}
+  const replies = thread.replies ?? []
+  if (thread.message?.text) handoff.text = thread.message.text
   const recent = handoff
     ? stores.read('--after', handoff.id, '--limit', '50')
     : stores.read('--limit', '50')
@@ -592,7 +614,7 @@ function start({ dir, config, stores, log }, [rawId], flags) {
   // calls, so two sessions starting the same item within the same second can
   // both succeed; one session per project is the norm that makes this enough.
   const item = stores.item(id)
-  if (item.dataSource && item.dataSource !== config.backlog.dataSource)
+  if (item.dataSource !== config.backlog.dataSource)
     fail(`"${item.name}" is not in this project's backlog`)
   if (!flags.force) {
     if (item.status !== 'Ready')
@@ -611,7 +633,7 @@ function start({ dir, config, stores, log }, [rawId], flags) {
   return 0
 }
 
-function set({ dir, stores, log }, [rawId], flags) {
+function set({ dir, config, stores, log }, [rawId], flags) {
   const id = pageId(rawId, 'set')
   if (flags.status === 'In Progress')
     fail('In Progress is the lock: take it with `start`, which checks it first')
@@ -622,6 +644,9 @@ function set({ dir, stores, log }, [rawId], flags) {
   ].filter(Boolean)
   if (changes.length === 0)
     fail('set needs at least one of --status, --owner, --pr')
+  const item = stores.item(id)
+  if (item.dataSource !== config.backlog.dataSource)
+    fail(`"${item.name}" is not in this project's backlog`)
   stores.update(
     id,
     Object.fromEntries(
@@ -632,7 +657,11 @@ function set({ dir, stores, log }, [rawId], flags) {
     ),
   )
   const summary = changes.map(([name, value]) => `${name}=${value}`).join(', ')
-  record(dir, `set ${id}: ${summary}`)
+  // A status change takes the item out of In Progress, so the claim is over.
+  record(dir, `set ${id}: ${summary}`, (state) => {
+    if (flags.status)
+      state.claimed = state.claimed.filter((claim) => claim.id !== id)
+  })
   log(`Updated ${id}: ${summary}.`)
   return 0
 }
@@ -669,8 +698,9 @@ function learn({ root, dir, stores, log }, [headline], flags) {
     kind: 'learning',
     ...(flags.topic && { topic: flags.topic }),
   })
-  record(dir, `learn ${posted.id ?? ''}: ${headline}`)
-  log(`Posted learning ${posted.id ?? ''}`.trim())
+  const id = postedId(posted)
+  record(dir, `learn ${id}: ${headline}`)
+  log(`Posted learning ${id}`.trim())
   return 0
 }
 
@@ -705,7 +735,7 @@ function close({ root, dir, stores, log }, _positional, flags) {
   })
   // Only now: a failed post above has thrown and left the reference in place.
   rmSync(dir, { recursive: true, force: true })
-  log(`Posted handoff ${posted.id ?? ''}`.trim())
+  log(`Posted handoff ${postedId(posted)}`.trim())
   log('Removed local/session/.')
   if (locked === undefined)
     log('Could not check whether claimed items are still In Progress.')
@@ -716,10 +746,27 @@ function close({ root, dir, stores, log }, _positional, flags) {
   return 0
 }
 
-function discard({ dir, log }, _positional, flags) {
+function discard({ root, dir, run, log }, _positional, flags) {
+  if (!existsSync(dir)) {
+    log('No session here: there is no local/session/ to remove.')
+    return 0
+  }
+  // The local record can be out of date: an item it lists may have moved on.
+  // Only an item that is still In Progress is a lock worth stopping for.
   const claimed = loadState(dir)?.claimed ?? []
-  const list = claimed.map((item) => `  - ${item.name} (${item.id})`)
-  if (claimed.length > 0 && !flags.force)
+  let held = claimed
+  if (claimed.length > 0)
+    try {
+      const stores = createStores(loadConfig(root), run)
+      held = claimed.filter(
+        (claim) => stores.item(claim.id).status === 'In Progress',
+      )
+    } catch (error) {
+      if (!(error instanceof SessionError)) throw error
+      // Could not check: treat every claim as held.
+    }
+  const list = held.map((item) => `  - ${item.name} (${item.id})`)
+  if (held.length > 0 && !flags.force)
     fail(
       [
         'this session claimed items that are still In Progress in the backlog:',
@@ -729,11 +776,23 @@ function discard({ dir, log }, _positional, flags) {
     )
   rmSync(dir, { recursive: true, force: true })
   log('Removed local/session/.')
-  if (claimed.length > 0) {
+  if (held.length > 0) {
     log('These stay In Progress in the backlog until someone changes them:')
     for (const line of list) log(line)
   }
   return 0
+}
+
+// The repo, wherever inside it the command was run from.
+function repoRoot() {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return process.cwd()
+  }
 }
 
 const handlers = { pull, start, set, raise, learn, close, discard }
@@ -741,7 +800,7 @@ const handlers = { pull, start, set, raise, learn, close, discard }
 export function main(
   argv,
   {
-    root = process.cwd(),
+    root = repoRoot(),
     run = defaultRun,
     now = () => new Date(),
     log = console.log,
@@ -752,7 +811,8 @@ export function main(
     fail(`usage: session.mjs <${COMMANDS.join('|')}> — see the file header`)
   const { positional, flags } = parseArgs(rest)
   const dir = join(root, 'local', 'session')
-  if (command === 'discard') return discard({ dir, log }, positional, flags)
+  if (command === 'discard')
+    return discard({ root, dir, run, log }, positional, flags)
   const config = loadConfig(root)
   const context = {
     root,
