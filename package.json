@@ -8,7 +8,7 @@
   },
   "scripts": {
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
-    "check": "for f in scripts/*.mjs template/flavors/*/scripts/*.mjs; do node --check \"$f\" || exit 1; done",
+    "check": "for f in scripts/*.mjs template/base/scripts/*.mjs template/flavors/*/scripts/*.mjs; do node --check \"$f\" || exit 1; done",
     "test": "node --test 'scripts/*.test.mjs'",
     "smoke": "node scripts/smoke.mjs",
     "verify": "pnpm check && pnpm test && pnpm smoke"

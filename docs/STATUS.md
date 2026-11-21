@@ -17,7 +17,7 @@ The cursor. Done / in progress / next / blocked. Keep it short.
 
 ## In progress
 
-- Nothing.
+- Session system (design agreed 2026-11-21, nothing built): Board for handoffs and learnings, Notion for the backlog, `/session-start` and `/session-end`. Plan in `plans/active/2026-11-21-session-system.md`.
 
 ## Next
 
