@@ -82,7 +82,11 @@ if (!/^[a-z0-9][a-z0-9-]*$/.test(boardScope))
   fail('--board-scope must be a Vercel team slug: lowercase letters, digits and hyphens')
 const backlogDataSource =
   args.backlog ?? '41f3d7d1-79ad-8045-a361-000b56ae7f12'
-if (!/^[0-9a-f-]{32,36}$/.test(backlogDataSource))
+if (
+  !/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(
+    backlogDataSource,
+  )
+)
   fail('--backlog must be a Notion data source id')
 
 const available = (kind) =>

@@ -36,7 +36,7 @@ Once per machine:
 | Notion CLI           | `curl -fsSL https://ntn.dev \| bash`, then `ntn login`                           |
 | The `board` skill    | `npx skills add vercel/board --skill board -g -a claude-code -y`                |
 
-The stamp defaults point at the jig owner's Vercel team and Notion data source. Stamping for yourself: pass `--board-scope <team>` and `--backlog <data-source-id>`, with a database that has `Name`, `Status`, `Owner`, `Project` and `PR Link` properties as the standard describes. `Project` is a relation to a database of projects (a plain select also works); the project's entry there must exist before the first `/session-start`, named as in `session.config.json`. The Board is experimental and anyone on the team can read a channel, so nothing secret goes on it.
+The stamp defaults point at the jig owner's Vercel team and Notion data source. Stamping for yourself: pass `--board-scope <team>` and `--backlog <data-source-id>`, with a database that has `Name`, `Status`, `Owner`, `Project` and `PR Link` properties as the standard describes. `Project` is a relation to a database of projects (a plain select also works); the project's entry there must exist before the first `/session-start`, named as in `session.config.json`. The owner names the script accepts (`OWNERS` and `AGENT` at the top of `scripts/session.mjs`) are the jig owner's too: edit them to match your `Owner` options. The Board is experimental and anyone on the team can read a channel, so nothing secret goes on it.
 
 ## Working on the jig
 
@@ -53,7 +53,7 @@ pnpm verify      # + stamp, install and verify the pnpm, Bun and Swift compositi
 - `AGENTS.md` — the canonical coding standards and agent operating rules (self-contained; projects inherit it).
 - `template/` — the files stamped into new projects: a shared base, stack flavors, and optional layers.
 - `scripts/` — the generator that does the stamping, its tests, and the smoke-stamp runner.
-- `docs/DECISIONS.md` — this repo's own decisions. Its backlog and learnings live where every project's do. The jig follows its own rules, and reaches the template's session commands and script by symlink (`.claude/skills`, `scripts/session.mjs`) so it runs exactly what it stamps.
+- `docs/DECISIONS.md` and `docs/LEARNINGS.md` — this repo's own decisions, and the learnings a contributor needs. Its backlog and learnings live where every project's do. The jig follows its own rules, and reaches the template's session commands and script by symlink (`.claude/skills`, `scripts/session.mjs`) so it runs exactly what it stamps.
 
 ## Philosophy
 

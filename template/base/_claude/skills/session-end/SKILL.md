@@ -51,26 +51,28 @@ Pick its state:
 
 Add `--pr <number>` when a PR is open. Add `--blocked decision|external|access` when the work is stuck: one value, the closest, with every blocker listed in the text.
 
-**Public repos only** (`docs/LEARNINGS.md` exists): if a learning from this session is one an outside contributor would need, add it to `docs/LEARNINGS.md` under its topic and commit it. Contributors cannot read the Board. Most learnings do not qualify.
+**Public repos only** (`docs/LEARNINGS.md` exists): if a learning from this session is one an outside contributor would need, draft the entry for `docs/LEARNINGS.md` under its topic. Contributors cannot read the Board. Most learnings do not qualify. Do not edit the file yet.
 
 ## 3. Show it
 
-Show the user the backlog changes, the new items, the learnings and the handoff text. Wait for confirmation. Apply any corrections to the draft before writing.
+Show the user the backlog changes, the new items, the learnings, any `docs/LEARNINGS.md` entry and the handoff text. Wait for confirmation. Apply any corrections to the draft before writing.
 
 ## 4. Write
 
-Notion and learnings first, the handoff last:
+If there is a `docs/LEARNINGS.md` entry, add it and commit it to the branch first. Then Notion and learnings, and the handoff last:
 
 ```bash
 node scripts/session.mjs set <item-id> --status "<status>" [--pr <url>]
-node scripts/session.mjs raise "<title>" [--owner Mitch --status Blocked] [--file <detail.md>]
+node scripts/session.mjs raise "<title>" [--owner <person> --status Blocked] [--file <detail.md>]
 node scripts/session.mjs learn "<headline>" [--topic <word>] [--file <fix.md>]
 node scripts/session.mjs close --file local/session/close.md --state <state> [--pr <n>] [--blocked <kind>]
 ```
 
 `close` posts the handoff and then removes `local/session/`. It runs last because it destroys the reference the other commands were drafted from.
 
-If any command fails, stop. Do not run `close`, and do not delete `local/session/` by hand. Tell the user exactly what was written and what was not. The next `/session-start` will find the unclosed session and finish the job.
+`close` also lists any claimed item it is leaving `In Progress`. If it names one you did not mean to keep, set it now.
+
+If any command fails, stop. Do not run `close`, and do not delete `local/session/` by hand. Tell the user exactly what was written and what was not. Every write that succeeded is recorded in `local/session/session.json`, so the next `/session-start` can finish the job without repeating any. Running the same `learn` or `close` again is safe: the Board posts identical text once.
 
 ## 5. Confirm
 

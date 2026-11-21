@@ -17,7 +17,7 @@ import { dirname, join, resolve } from 'node:path'
 import { after, beforeEach, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { SessionError, main } from '../template/base/scripts/session.mjs'
+import { SessionError, defaultRun, main } from '../template/base/scripts/session.mjs'
 
 const scratch = mkdtempSync(join(tmpdir(), 'jig-session-'))
 after(() => rmSync(scratch, { recursive: true, force: true }))
@@ -32,6 +32,7 @@ const page = (id, name, status, owner = null, pr = null) => ({
   id,
   url: `https://notion.test/${id}`,
   created_time: '2026-11-20T00:00:00.000Z',
+  parent: { type: 'data_source_id', data_source_id: 'ds-1' },
   properties: {
     Name: { title: [{ plain_text: name }] },
     Status: { select: status ? { name: status } : null },
@@ -60,12 +61,14 @@ function fakeRun(routes) {
       if (!line.includes(match)) continue
       const value = typeof result === 'function' ? result(line) : result
       if (value instanceof Error) throw value
+      if (value?.raw !== undefined) return value.raw
       return JSON.stringify(value)
     }
     throw new Error(`unexpected command: ${line}`)
   }
 }
 
+const RAW = (raw) => ({ raw })
 const BOARD_EMPTY = new Error('{"reason":"channel_not_found"}')
 
 const project = (id, name) => ({
@@ -97,11 +100,11 @@ const happyRoutes = (overrides = [], schema) => [
     {
       has_more: false,
       results: [
-        page('p-ready', 'Add the revoke button', 'Ready', 'Code Agent'),
-        page('p-free', 'Show who is online', 'Ready'),
-        page('p-mitch', 'Test on a real iPhone', 'Ready', 'Mitch'),
-        page('p-prog', 'Status history view', 'In Progress', 'Code Agent'),
-        page('p-triage', 'PR Assistant', 'Triage', 'Mitch'),
+        page('11111111-1111-4111-8111-111111111111', 'Add the revoke button', 'Ready', 'Code Agent'),
+        page('22222222-2222-4222-8222-222222222222', 'Show who is online', 'Ready'),
+        page('33333333-3333-4333-8333-333333333333', 'Test on a real iPhone', 'Ready', 'Mitch'),
+        page('44444444-4444-4444-8444-444444444444', 'Status history view', 'In Progress', 'Code Agent'),
+        page('55555555-5555-4555-8555-555555555555', 'PR Assistant', 'Triage', 'Mitch'),
       ],
     },
   ],
@@ -130,7 +133,20 @@ const happyRoutes = (overrides = [], schema) => [
     },
   ],
   [
-    'board read my-thing --limit',
+    'board read msg_h1',
+    {
+      message: { id: 'msg_h1', text: 'handoff' },
+      replies: [
+        {
+          id: 'msg_h1_2',
+          text: 'Mitch: the Google app is published now',
+          createdAt: '2026-11-20T11:00:00Z',
+        },
+      ],
+    },
+  ],
+  [
+    'board read my-thing --after msg_h1',
     {
       threads: [
         thread('msg_h1', 'handoff', { kind: 'handoff' }),
@@ -140,6 +156,8 @@ const happyRoutes = (overrides = [], schema) => [
           {},
           '2026-11-20T12:00:00Z',
         ),
+        thread('msg_t1', 'a task', { 'board.task': 'ready' }),
+        thread('msg_l9', 'a learning', { kind: 'learning' }),
       ],
     },
   ],
@@ -214,10 +232,11 @@ describe('pull', () => {
     session(['pull'])
     const board = calls.filter((call) => call.command === 'vercel')
     assert.ok(board.length >= 3)
-    for (const call of board) {
+    for (const call of board)
       assert.ok(call.line.includes('--scope acme'), call.line)
-      assert.ok(call.line.includes('board read my-thing'), call.line)
-    }
+    // Every read is of this project's channel or of one thread found in it.
+    for (const call of board)
+      assert.match(call.line, /board read (my-thing|msg_h1) /)
   })
 
   it('writes the backlog grouped by status and marks what a session may start', () => {
@@ -225,10 +244,10 @@ describe('pull', () => {
     const backlog = readLocal('backlog.md')
     assert.match(backlog, /## In Progress\n\n- Status history view/)
     assert.match(backlog, /## Ready\n/)
-    assert.match(backlog, /- \[startable\] Add the revoke button .*`p-ready`/)
-    assert.match(backlog, /- \[startable\] Show who is online .*`p-free`/)
+    assert.match(backlog, /- \[startable\] Add the revoke button .*`11111111-1111-4111-8111-111111111111`/)
+    assert.match(backlog, /- \[startable\] Show who is online .*`22222222-2222-4222-8222-222222222222`/)
     // Ready but a person's: listed, never startable.
-    assert.match(backlog, /- Test on a real iPhone .*Mitch.*`p-mitch`/)
+    assert.match(backlog, /- Test on a real iPhone .*Mitch.*`33333333-3333-4333-8333-333333333333`/)
     assert.ok(backlog.indexOf('## In Progress') < backlog.indexOf('## Ready'))
     assert.ok(backlog.indexOf('## Ready') < backlog.indexOf('## Triage'))
   })
@@ -239,6 +258,120 @@ describe('pull', () => {
     assert.match(handoff, /state=paused/)
     assert.match(handoff, /\*\*Next:\*\* the revoke button/)
     assert.match(handoff, /please look at the flaky gate first/)
+  })
+
+  it('shows replies on the handoff thread itself', () => {
+    session(['pull'])
+    assert.match(readLocal('handoff.md'), /the Google app is published now/)
+  })
+
+  it('leaves tasks, learnings and the handoff out of "posted since"', () => {
+    session(['pull'])
+    const since = readLocal('handoff.md').split('## Posted since')[1]
+    assert.doesNotMatch(since, /a task|a learning|msg_h1`/)
+  })
+
+  it('takes the newest handoff, whatever order the board lists them in', () => {
+    session(
+      ['pull'],
+      happyRoutes([
+        [
+          'kind=handoff',
+          {
+            threads: [
+              thread(
+                'msg_h1',
+                '**Changed:** newest\n**Half-done:** -\n**Next:** -',
+                { kind: 'handoff', state: 'review' },
+                '2026-11-20T21:00:00Z',
+              ),
+              thread(
+                'msg_h0',
+                '**Changed:** older, but replied to later',
+                { kind: 'handoff', state: 'paused' },
+                '2026-11-20T05:00:00Z',
+              ),
+            ],
+          },
+        ],
+      ]),
+    )
+    assert.match(readLocal('handoff.md'), /\*\*Changed:\*\* newest/)
+  })
+
+  it('says a silent channel may be a wrong name', () => {
+    const { out } = session(
+      ['pull'],
+      happyRoutes([['board read', BOARD_EMPTY]]),
+    )
+    assert.match(out, /my-thing.*session\.config\.json/s)
+  })
+
+  it('fails when a later board read fails, and writes nothing', () => {
+    assert.throws(
+      () =>
+        session(
+          ['pull'],
+          happyRoutes([['kind=learning', new Error('rate_limited')]]),
+        ),
+      /Board/,
+    )
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
+  })
+
+  it('fails on a read that is not JSON rather than treating it as empty', () => {
+    assert.throws(
+      () => session(['pull'], happyRoutes([['kind=handoff', () => RAW('oops')]])),
+      /Board.*not JSON/s,
+    )
+  })
+
+  it('treats leftover files without a session record as unclosed', () => {
+    mkdirSync(join(root, 'local', 'session'), { recursive: true })
+    writeFileSync(local('plan.md'), '# old plan')
+    const { code, out } = session(['pull'])
+    assert.equal(code, 2)
+    assert.match(out, /no readable session\.json/)
+    assert.equal(readLocal('plan.md'), '# old plan')
+  })
+
+  it('refuses two projects with the same name', () => {
+    assert.throws(
+      () =>
+        session(
+          ['pull'],
+          happyRoutes([
+            [
+              'data_sources/ds-projects/query',
+              {
+                results: [
+                  project('proj-1', 'my thing'),
+                  project('proj-2', 'MY THING'),
+                ],
+              },
+            ],
+          ]),
+        ),
+      /more than one/,
+    )
+  })
+
+  it('prefers the exact name over one that differs only in case', () => {
+    session(
+      ['pull'],
+      happyRoutes([
+        [
+          'data_sources/ds-projects/query',
+          {
+            results: [
+              project('proj-lower', 'my thing'),
+              project('proj-1', ' My Thing '),
+            ],
+          },
+        ],
+      ]),
+    )
+    assert.deepEqual(backlogFilter().and[0].relation, { contains: 'proj-1' })
   })
 
   it('indexes learnings by headline and thread id, not full text', () => {
@@ -263,9 +396,9 @@ describe('pull', () => {
               ? {
                   has_more: true,
                   next_cursor: 'c2',
-                  results: [page('p-1', 'First', 'Ready')],
+                  results: [page('77777777-7777-4777-8777-777777777777', 'First', 'Ready')],
                 }
-              : { has_more: false, results: [page('p-2', 'Second', 'Todo')] },
+              : { has_more: false, results: [page('88888888-8888-4888-8888-888888888888', 'Second', 'Todo')] },
         ],
       ]),
     )
@@ -321,9 +454,9 @@ describe('pull', () => {
 
   it('refuses to overwrite an unclosed session and says what it held', () => {
     session(['pull'])
-    session(['start', 'p-ready'], [
-      ['pages/p-ready -X PATCH', {}],
-      ['pages/p-ready', page('p-ready', 'Add the revoke button', 'Ready')],
+    session(['start', '11111111-1111-4111-8111-111111111111'], [
+      ['pages/11111111-1111-4111-8111-111111111111 -X PATCH', {}],
+      ['pages/11111111-1111-4111-8111-111111111111', page('11111111-1111-4111-8111-111111111111', 'Add the revoke button', 'Ready')],
     ])
     writeFileSync(local('plan.md'), '# plan')
     calls = []
@@ -339,13 +472,13 @@ describe('pull', () => {
 
 describe('start', () => {
   const live = (status, owner) => [
-    ['pages/p-ready -X PATCH', {}],
-    ['pages/p-ready', page('p-ready', 'Add the revoke button', status, owner)],
+    ['pages/11111111-1111-4111-8111-111111111111 -X PATCH', {}],
+    ['pages/11111111-1111-4111-8111-111111111111', page('11111111-1111-4111-8111-111111111111', 'Add the revoke button', status, owner)],
   ]
 
   it('claims a Ready item for the code agent and records the claim', () => {
     session(['pull'])
-    session(['start', 'p-ready'], live('Ready', 'Code Agent'))
+    session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Code Agent'))
     const patch = calls.find((call) => call.line.includes('-X PATCH'))
     assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]), {
       properties: {
@@ -354,14 +487,14 @@ describe('start', () => {
       },
     })
     assert.deepEqual(JSON.parse(readLocal('session.json')).claimed, [
-      { id: 'p-ready', name: 'Add the revoke button' },
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Add the revoke button' },
     ])
   })
 
   it('checks the live status, so an item another session took is refused', () => {
     session(['pull'])
     assert.throws(
-      () => session(['start', 'p-ready'], live('In Progress', 'Code Agent')),
+      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('In Progress', 'Code Agent')),
       /In Progress/,
     )
     assert.equal(
@@ -373,27 +506,27 @@ describe('start', () => {
   it("refuses a person's item", () => {
     session(['pull'])
     assert.throws(
-      () => session(['start', 'p-ready'], live('Ready', 'Mitch')),
+      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Mitch')),
       /Mitch/,
     )
   })
 
   it('takes over an item when forced', () => {
     session(['pull'])
-    session(['start', 'p-ready', '--force'], live('In Progress', 'Code Agent'))
+    session(['start', '11111111-1111-4111-8111-111111111111', '--force'], live('In Progress', 'Code Agent'))
     assert.ok(calls.some((call) => call.line.includes('-X PATCH')))
   })
 
   it('needs a session', () => {
-    assert.throws(() => session(['start', 'p-ready']), /pull/)
+    assert.throws(() => session(['start', '11111111-1111-4111-8111-111111111111']), /pull/)
   })
 })
 
 describe('set', () => {
   it('moves an item to review with its PR link', () => {
     session(
-      ['set', 'p-1', '--status', 'In Review', '--pr', 'https://gh.test/pr/4'],
-      [['pages/p-1 -X PATCH', {}]],
+      ['set', '77777777-7777-4777-8777-777777777777', '--status', 'In Review', '--pr', 'https://gh.test/pr/4'],
+      [['pages/77777777-7777-4777-8777-777777777777 -X PATCH', {}]],
     )
     const patch = calls[0]
     assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]), {
@@ -406,13 +539,13 @@ describe('set', () => {
 
   it('rejects a status the backlog does not have', () => {
     assert.throws(
-      () => session(['set', 'p-1', '--status', 'Shipped'], []),
+      () => session(['set', '77777777-7777-4777-8777-777777777777', '--status', 'Shipped'], []),
       /Shipped/,
     )
   })
 
   it('rejects an owner the backlog does not have', () => {
-    assert.throws(() => session(['set', 'p-1', '--owner', 'Bob'], []), /Bob/)
+    assert.throws(() => session(['set', '77777777-7777-4777-8777-777777777777', '--owner', 'Bob'], []), /Bob/)
   })
 })
 
@@ -421,7 +554,7 @@ describe('raise', () => {
     const { out } = session(
       ['raise', 'Signed-out /api/me logs a 401'],
       [
-        ['v1/pages', { id: 'p-new', url: 'https://notion.test/p-new' }],
+        ['v1/pages', { id: '66666666-6666-4666-8666-666666666666', url: 'https://notion.test/66666666-6666-4666-8666-666666666666' }],
         ...projectRoutes(),
       ],
     )
@@ -434,7 +567,7 @@ describe('raise', () => {
         Status: { select: { name: 'Triage' } },
       },
     })
-    assert.match(out, /p-new/)
+    assert.match(out, /66666666-6666-4666-8666-666666666666/)
   })
 
   it("files something that waits on a person as theirs, with the reason in the body", () => {
@@ -451,8 +584,8 @@ describe('raise', () => {
         'why.md',
       ],
       [
-        ['pages update p-new', {}],
-        ['v1/pages', { id: 'p-new', url: 'https://notion.test/p-new' }],
+        ['pages update 66666666-6666-4666-8666-666666666666', {}],
+        ['v1/pages', { id: '66666666-6666-4666-8666-666666666666', url: 'https://notion.test/66666666-6666-4666-8666-666666666666' }],
         ...projectRoutes(),
       ],
     )
@@ -568,12 +701,34 @@ describe('close', () => {
 })
 
 describe('discard', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+  const claim = () =>
+    session(['start', READY], [
+      [`pages/${READY} -X PATCH`, {}],
+      [`pages/${READY}`, page(READY, 'Add the revoke button', 'Ready')],
+    ])
+
   it('removes the local reference without writing anywhere', () => {
     session(['pull'])
     calls = []
     session(['discard'], [])
     assert.equal(calls.length, 0)
     assert.equal(existsSync(join(root, 'local', 'session')), false)
+  })
+
+  it('refuses while the session still holds items, and names them', () => {
+    session(['pull'])
+    claim()
+    assert.throws(() => session(['discard'], []), /Add the revoke button/)
+    assert.ok(existsSync(local('session.json')))
+  })
+
+  it('drops a session that holds items when forced', () => {
+    session(['pull'])
+    claim()
+    const { out } = session(['discard', '--force'], [])
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
+    assert.match(out, /In Progress.*Add the revoke button/s)
   })
 })
 
@@ -614,5 +769,321 @@ describe('as a command', () => {
     })
     assert.equal(result.status, 1)
     assert.match(result.stderr, /usage: session\.mjs/)
+  })
+})
+
+describe('what a session wrote', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+  const NEW = '66666666-6666-4666-8666-666666666666'
+  const writes = () => JSON.parse(readLocal('session.json')).written
+
+  it('is recorded, so an interrupted close can be finished without repeats', () => {
+    session(['pull'])
+    session(['start', READY], [
+      [`pages/${READY} -X PATCH`, {}],
+      [`pages/${READY}`, page(READY, 'Add the revoke button', 'Ready')],
+    ])
+    session(['set', READY, '--status', 'In Review', '--pr', 'https://gh.test/4'], [
+      [`pages/${READY} -X PATCH`, {}],
+    ])
+    session(['raise', 'A new bug'], [
+      ['v1/pages', { id: NEW }],
+      ...projectRoutes(),
+    ])
+    session(['learn', 'Sockets drop at 60s'], [
+      ['board post', { id: 'msg_new' }],
+    ])
+    const written = writes()
+    assert.equal(written.length, 4)
+    assert.match(written[0], /start.*Add the revoke button/)
+    assert.match(written[1], /set.*In Review/)
+    assert.match(written[2], /raise.*A new bug/)
+    assert.match(written[3], /learn.*Sockets drop at 60s/)
+  })
+
+  it('is listed when the next pull finds the session unclosed', () => {
+    session(['pull'])
+    session(['learn', 'Sockets drop at 60s'], [
+      ['board post', { id: 'msg_new' }],
+    ])
+    const { code, out } = session(['pull'])
+    assert.equal(code, 2)
+    assert.match(out, /already wrote.*learn.*Sockets drop at 60s/s)
+  })
+
+  it('works outside a session, recording nothing', () => {
+    session(['learn', 'Sockets drop at 60s'], [
+      ['board post', { id: 'msg_new' }],
+    ])
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
+  })
+})
+
+describe('a write whose answer cannot be read', () => {
+  const HANDOFF = '**Changed:** x\n**Half-done:** y\n**Next:** z'
+
+  it('still counts as written: the handoff is not left to be posted twice', () => {
+    session(['pull'])
+    writeFileSync(local('close.md'), HANDOFF)
+    const { code } = session(
+      ['close', '--file', 'local/session/close.md', '--state', 'paused'],
+      [['board post', RAW('Vercel CLI 66.2.0 [beta]\nposted')]],
+    )
+    assert.equal(code, 0)
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
+  })
+
+  it('reads JSON that follows a banner line', () => {
+    const { out } = session(['learn', 'x'], [
+      ['board post', RAW('Vercel CLI 66.2.0 [beta]\n{"id":"msg_9"}\n')],
+    ])
+    assert.match(out, /msg_9/)
+  })
+
+  it('gives every post a key, so a retry of the same text posts once', () => {
+    const key = (text) => {
+      calls = []
+      session(['learn', text], [['board post', { id: 'm' }]])
+      const { args } = calls[0]
+      return args[args.indexOf('--idempotency-key') + 1]
+    }
+    assert.match(key('one'), /^[0-9a-f]{32,}$/)
+    assert.equal(key('one'), key('one'))
+    assert.notEqual(key('one'), key('two'))
+  })
+
+  it('says so when Notion created an item but returned no id', () => {
+    const { out } = session(['raise', 'A new bug'], [
+      ['v1/pages', RAW('')],
+      ...projectRoutes(),
+    ])
+    assert.match(out, /check the backlog before raising it again/i)
+  })
+})
+
+describe('arguments', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+
+  it('does not take the next flag as a value', () => {
+    assert.throws(
+      () => session(['set', READY, '--pr', '--status', 'Done'], []),
+      /--pr needs a value/,
+    )
+    assert.equal(calls.length, 0)
+  })
+
+  it('rejects an unknown option', () => {
+    assert.throws(() => session(['pull', '--fast'], []), /unknown option/)
+  })
+
+  it('rejects an item id that is not a Notion id', () => {
+    for (const command of ['set', 'start'])
+      assert.throws(
+        () => session([command, '../databases/abc', '--status', 'Done'], []),
+        /not a Notion page id/,
+      )
+    assert.equal(calls.length, 0)
+  })
+
+  it('reads --file only from inside the repo', () => {
+    assert.throws(
+      () => session(['learn', 'x', '--file', '/etc/hosts'], []),
+      /inside the repo/,
+    )
+    assert.throws(
+      () => session(['learn', 'x', '--file', '../outside.md'], []),
+      /inside the repo/,
+    )
+  })
+
+  it('names a --file that does not exist', () => {
+    assert.throws(
+      () => session(['learn', 'x', '--file', 'missing.md'], []),
+      (error) => error instanceof SessionError && /missing\.md/.test(error.message),
+    )
+  })
+
+  it('labels a blocked handoff', () => {
+    session(['pull'])
+    writeFileSync(
+      local('close.md'),
+      '**Changed:** x\n**Half-done:** y\n**Next:** z',
+    )
+    calls = []
+    session(
+      [
+        'close',
+        '--file',
+        'local/session/close.md',
+        '--state',
+        'waiting',
+        '--blocked',
+        'decision',
+      ],
+      [['board post', { id: 'm' }]],
+    )
+    assert.match(calls.at(-1).line, /--label blocked=decision/)
+  })
+})
+
+describe('the lock', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+
+  it('cannot be taken with set: In Progress goes through start', () => {
+    assert.throws(
+      () => session(['set', READY, '--status', 'In Progress'], []),
+      /start/,
+    )
+    assert.equal(calls.length, 0)
+  })
+
+  it("refuses an item from another project's backlog", () => {
+    session(['pull'])
+    const foreign = {
+      ...page(READY, 'Someone else', 'Ready'),
+      parent: { type: 'data_source_id', data_source_id: 'ds-other' },
+    }
+    assert.throws(
+      () => session(['start', READY], [[`pages/${READY}`, foreign]]),
+      /not in this project's backlog/,
+    )
+  })
+
+  it('refuses when the item cannot be read', () => {
+    session(['pull'])
+    assert.throws(
+      () => session(['start', READY], [[`pages/${READY}`, RAW('')]]),
+      /Notion.*not JSON/s,
+    )
+  })
+})
+
+describe('closing', () => {
+  const READY = '11111111-1111-4111-8111-111111111111'
+  const HANDOFF = '**Changed:** x\n**Half-done:** y\n**Next:** z'
+
+  it('needs a session: there is nothing to hand off without one', () => {
+    writeFileSync(join(root, 'h.md'), HANDOFF)
+    assert.throws(
+      () =>
+        session(['close', '--file', 'h.md', '--state', 'done'], [
+          ['board post', { id: 'm' }],
+        ]),
+      /pull/,
+    )
+    assert.equal(calls.length, 0)
+  })
+
+  it('warns about items it is leaving locked', () => {
+    session(['pull'])
+    session(['start', READY], [
+      [`pages/${READY} -X PATCH`, {}],
+      [`pages/${READY}`, page(READY, 'Add the revoke button', 'Ready')],
+    ])
+    writeFileSync(local('close.md'), HANDOFF)
+    const { out } = session(
+      ['close', '--file', 'local/session/close.md', '--state', 'paused'],
+      [
+        ['board post', { id: 'm' }],
+        [
+          `pages/${READY}`,
+          page(READY, 'Add the revoke button', 'In Progress', 'Code Agent'),
+        ],
+      ],
+    )
+    assert.match(out, /still In Progress.*Add the revoke button/s)
+  })
+
+  it('finishes an unclosed session: close, then pull again', () => {
+    session(['pull'])
+    writeFileSync(local('close.md'), HANDOFF)
+    assert.equal(session(['pull']).code, 2)
+    session(
+      ['close', '--file', 'local/session/close.md', '--state', 'paused'],
+      [['board post', { id: 'm' }]],
+    )
+    assert.equal(session(['pull']).code, 0)
+  })
+})
+
+describe('settings and state files', () => {
+  it('says which settings are missing', () => {
+    writeFileSync(
+      join(root, 'session.config.json'),
+      JSON.stringify({ board: { scope: 'acme' }, backlog: {} }),
+    )
+    assert.throws(
+      () => session(['pull']),
+      /board\.channel, backlog\.dataSource, backlog\.project/,
+    )
+  })
+
+  it('reports a settings file that is not JSON', () => {
+    writeFileSync(join(root, 'session.config.json'), '{ nope')
+    assert.throws(
+      () => session(['pull']),
+      (error) =>
+        error instanceof SessionError &&
+        /session\.config\.json is not valid JSON/.test(error.message),
+    )
+  })
+
+  it('posts as claude unless told otherwise', () => {
+    writeFileSync(
+      join(root, 'session.config.json'),
+      JSON.stringify({ ...CONFIG, board: { scope: 'acme', channel: 'my-thing' } }),
+    )
+    session(['learn', 'x'], [['board post', { id: 'm' }]])
+    assert.match(calls[0].line, /--as claude/)
+  })
+
+  it('reports a damaged session record instead of crashing', () => {
+    session(['pull'])
+    writeFileSync(local('session.json'), '')
+    const { code, out } = session(['pull'])
+    assert.equal(code, 2)
+    assert.match(out, /no readable session\.json/)
+  })
+
+  it('files under a select Project by name', () => {
+    session(['raise', 'A new bug'], [
+      ['v1/pages', { id: '66666666-6666-4666-8666-666666666666' }],
+      ...projectRoutes(SELECT_SCHEMA),
+    ])
+    const create = calls.find((call) => call.line.includes('v1/pages'))
+    assert.deepEqual(
+      JSON.parse(create.args[create.args.indexOf('-d') + 1]).properties.Project,
+      { select: { name: 'My Thing' } },
+    )
+  })
+})
+
+describe('running a real command', () => {
+  // The Board CLI reports failures as JSON on stdout with nothing on stderr.
+  const node = (source) => defaultRun(process.execPath, ['-e', source])
+
+  it('returns stdout', () => {
+    assert.equal(node('console.log("hi")').trim(), 'hi')
+  })
+
+  it('keeps what a failing command printed to stdout', () => {
+    assert.throws(
+      () => node('console.log(\'{"reason":"channel_not_found"}\'); process.exit(1)'),
+      /channel_not_found/,
+    )
+  })
+
+  it('keeps stderr too', () => {
+    assert.throws(
+      () => node('console.error("bad token"); process.exit(1)'),
+      /bad token/,
+    )
+  })
+
+  it('says when the command is not installed', () => {
+    assert.throws(
+      () => defaultRun('definitely-not-a-command-xyz', []),
+      /not installed/,
+    )
   })
 })
