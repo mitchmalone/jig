@@ -53,7 +53,7 @@ pnpm verify      # + stamp, install and verify the pnpm, Bun and Swift compositi
 - `AGENTS.md` — the canonical coding standards and agent operating rules (self-contained; projects inherit it).
 - `template/` — the files stamped into new projects: a shared base, stack flavors, and optional layers.
 - `scripts/` — the generator that does the stamping, its tests, and the smoke-stamp runner.
-- `docs/` — this repo's own status, decisions, journal and plans. The jig is not a product and has no entry in the backlog's projects database, so it keeps its working state in the repo (see `docs/DECISIONS.md`, 2026-11-21).
+- `docs/DECISIONS.md` — this repo's own decisions. Its backlog and learnings live where every project's do. The jig follows its own rules, and reaches the template's session commands and script by symlink (`.claude/skills`, `scripts/session.mjs`) so it runs exactly what it stamps.
 
 ## Philosophy
 

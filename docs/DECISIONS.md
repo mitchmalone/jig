@@ -19,7 +19,7 @@ Reasoning:
 
 Costs accepted: a session needs network and two logins (`ntn`, `vercel`) to start; learnings and handoffs are no longer versioned with the code; the Board is experimental and US-hosted. Reconverge trigger: the Board changes terms or loses data — learnings move into the repo beside the decisions. The owner's team and data source are generator defaults (`--board-scope`, `--backlog`), not secrets; a fork passes its own.
 
-**The jig itself stays on in-repo docs.** The backlog's `Project` relates to a database of products, and the jig is tooling, not a product (Mitch, 2026-11-21). Its `STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` remain until tooling repos have a backlog home. Its journal was copied to the `jig` Board channel as 48 learnings during the build; `docs/JOURNAL.md` remains the record. Reconverge trigger: a decision on where tooling repos' work items live.
+**The jig follows its own rule.** It has an entry in the projects database, its roadmap and status items are in The Backlog (22 items), and its journal is on the `jig` channel (52 learnings). Its `STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` are deleted; git history keeps them. It reaches the template's commands and script by symlink rather than carrying a copy, so the jig runs exactly what it stamps. `board-ops` is deleted, folder and repository.
 
 Deferred: a hook that closes a session automatically (trigger: a session is lost without `/session-end` more than once); a Board profile per session (trigger: two sessions on one project at once become routine); agents other than Claude Code.
 
