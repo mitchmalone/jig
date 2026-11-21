@@ -310,4 +310,6 @@ if (toolchain === 'swift')
 console.log(`  1. ${pm} install   # also installs git hooks`)
 console.log(`  2. fill in AGENTS.md (identity, stack, invariants)`)
 console.log(`  3. infisical init, then copy .envrc.example to .envrc`)
-console.log(`  4. start a Claude Code session and run /session-start`)
+console.log(
+  `  4. add "${title}" to the projects database, then run /session-start in Claude Code`,
+)

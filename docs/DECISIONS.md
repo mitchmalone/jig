@@ -4,7 +4,7 @@ Append-only, newest first. Decision, context, reasoning. Decided once — don't 
 
 ## 2026-11-21 — Working state moves out of the repo: Notion backlog, Board handoffs and learnings, two session commands
 
-`STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` are retired. Work items live in one shared Notion database (The Backlog, a `Project` value per repo). Session handoffs and learnings live on the Vercel Board, one channel per repo. A session's plan and its copy of both live in gitignored `local/session/`. `/session-start` and `/session-end` are stamped into every project and drive a stamped, zero-dependency `scripts/session.mjs`. `DECISIONS.md` stays in the repo. Public repos add a curated `docs/LEARNINGS.md`. The `board-ops` repo of Board conventions is folded into the standard.
+`STATUS.md`, `ROADMAP.md`, `JOURNAL.md` and `plans/` are retired. Work items live in one shared Notion database (The Backlog, each item related to its project). Session handoffs and learnings live on the Vercel Board, one channel per repo. A session's plan and its copy of both live in gitignored `local/session/`. `/session-start` and `/session-end` are stamped into every project and drive a stamped, zero-dependency `scripts/session.mjs`. `DECISIONS.md` stays in the repo. Public repos add a curated `docs/LEARNINGS.md`. The `board-ops` repo of Board conventions is folded into the standard.
 
 Context: Wriker ran a Board handoff routine from an `AGENTS.md` block alone and it did not fire on its own; Mitch had to ask for the handoff after a day of work. And the backlog was spread across one `ROADMAP.md` and one `STATUS.md` per repo, which nobody can manage across projects.
 

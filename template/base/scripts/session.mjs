@@ -140,33 +140,62 @@ function createStores(config, run) {
     }
   }
 
-  return {
-    backlog() {
-      const pages = []
-      let cursor
-      do {
-        const body = {
+  const queryAll = (dataSource, query) => {
+    const pages = []
+    let cursor
+    do {
+      const page = notion([
+        `v1/data_sources/${dataSource}/query`,
+        '-d',
+        JSON.stringify({
           page_size: 100,
-          filter: {
-            and: [
-              {
-                property: 'Project',
-                select: { equals: config.backlog.project },
-              },
-              { property: 'Status', select: { does_not_equal: 'Done' } },
-            ],
-          },
+          ...query,
           ...(cursor && { start_cursor: cursor }),
-        }
-        const page = notion([
-          `v1/data_sources/${config.backlog.dataSource}/query`,
-          '-d',
-          JSON.stringify(body),
-        ])
-        pages.push(...(page.results ?? []))
-        cursor = page.has_more ? page.next_cursor : undefined
-      } while (cursor)
-      return pages.map(toItem)
+        }),
+      ])
+      pages.push(...(page.results ?? []))
+      cursor = page.has_more ? page.next_cursor : undefined
+    } while (cursor)
+    return pages
+  }
+
+  return {
+    // The backlog's Project is a relation to a projects database (or, in a
+    // simpler backlog, a select). Either way the config holds the name; this
+    // turns it into the filter that finds the project's items and the value
+    // that files a new one under it.
+    project() {
+      const name = config.backlog.project
+      const property = notion([`v1/data_sources/${config.backlog.dataSource}`])
+        .properties?.Project
+      if (property?.type === 'select')
+        return { filter: { select: { equals: name } }, value: select(name) }
+      if (property?.type !== 'relation')
+        fail(
+          'the backlog has no Project property that is a relation or a select',
+        )
+      const projects = queryAll(property.relation.data_source_id, {})
+      const match = projects.find(
+        (page) => titleOf(page).toLowerCase() === name.toLowerCase(),
+      )
+      if (!match)
+        fail(
+          `"${name}" is not in the projects database the backlog's Project points to: add it there, then run this again`,
+        )
+      return {
+        filter: { relation: { contains: match.id } },
+        value: { relation: [{ id: match.id }] },
+      }
+    },
+    backlog(project) {
+      return queryAll(config.backlog.dataSource, {
+        filter: {
+          and: [
+            { property: 'Project', ...project.filter },
+            { property: 'Status', select: { does_not_equal: 'Done' } },
+          ],
+        },
+      }).map(toItem)
     },
     item: (id) => toItem(notion([`v1/pages/${id}`])),
     update: (id, properties) =>
@@ -218,14 +247,22 @@ function createStores(config, run) {
 
 // --- shaping -----------------------------------------------------------------
 
+// A page's title, whatever its title property is called.
+function titleOf(page) {
+  const title = Object.values(page.properties ?? {}).find(
+    (property) => property.type === 'title' || property.title,
+  )
+  return (title?.title ?? [])
+    .map((part) => part.plain_text ?? part.text?.content ?? '')
+    .join('')
+}
+
 function toItem(page) {
   const properties = page.properties ?? {}
   return {
     id: page.id,
     url: page.url ?? '',
-    name: (properties.Name?.title ?? [])
-      .map((part) => part.plain_text ?? part.text?.content ?? '')
-      .join(''),
+    name: titleOf(page),
     status: properties.Status?.select?.name ?? '',
     owner: properties.Owner?.select?.name ?? '',
     pr: properties['PR Link']?.url ?? '',
@@ -352,7 +389,7 @@ function pull({ dir, config, stores, now, log }) {
 
   // Fetch everything before writing anything: a half-written reference would
   // pass for a whole one.
-  const items = stores.backlog()
+  const items = stores.backlog(stores.project())
   const handoff = stores.read('--label', 'kind=handoff', '--limit', '1')[0]
     ?.message
   const learnings = stores
@@ -433,11 +470,11 @@ function set({ stores, log }, [id], flags) {
 const readText = (root, file) =>
   readFileSync(resolve(root, file), 'utf8').trim()
 
-function raise({ root, config, stores, log }, [title], flags) {
+function raise({ root, stores, log }, [title], flags) {
   if (!title) fail('raise needs a title')
   const properties = {
     Name: { title: [{ text: { content: title } }] },
-    Project: select(config.backlog.project),
+    Project: stores.project().value,
     Status: select(oneOf(flags.status ?? 'Triage', STATUSES, 'status')),
     ...(flags.owner && { Owner: select(oneOf(flags.owner, OWNERS, 'owner')) }),
   }

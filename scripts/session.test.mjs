@@ -68,7 +68,29 @@ function fakeRun(routes) {
 
 const BOARD_EMPTY = new Error('{"reason":"channel_not_found"}')
 
-const happyRoutes = (overrides = []) => [
+const project = (id, name) => ({
+  id,
+  properties: { Name: { type: 'title', title: [{ plain_text: name }] } },
+})
+
+// The backlog's schema and the projects database its Project relates to.
+// Listed after the query route: the fake matches on substrings, first wins.
+const projectRoutes = (schema = RELATION_SCHEMA) => [
+  [
+    'data_sources/ds-projects/query',
+    { has_more: false, results: [project('proj-1', 'My Thing')] },
+  ],
+  ['v1/data_sources/ds-1', schema],
+]
+
+const RELATION_SCHEMA = {
+  properties: {
+    Project: { type: 'relation', relation: { data_source_id: 'ds-projects' } },
+  },
+}
+const SELECT_SCHEMA = { properties: { Project: { type: 'select', select: {} } } }
+
+const happyRoutes = (overrides = [], schema) => [
   ...overrides,
   [
     'data_sources/ds-1/query',
@@ -121,6 +143,7 @@ const happyRoutes = (overrides = []) => [
       ],
     },
   ],
+  ...projectRoutes(schema),
 ]
 
 function session(argv, routes = happyRoutes()) {
@@ -132,6 +155,11 @@ function session(argv, routes = happyRoutes()) {
     log: (line) => out.push(line),
   })
   return { code, out: out.join('\n') }
+}
+
+const backlogFilter = () => {
+  const query = calls.find((call) => call.line.includes('ds-1/query'))
+  return JSON.parse(query.args[query.args.indexOf('-d') + 1]).filter
 }
 
 const local = (file) => join(root, 'local', 'session', file)
@@ -147,14 +175,39 @@ beforeEach(() => {
 describe('pull', () => {
   it('asks Notion only for this project and leaves Done out', () => {
     session(['pull'])
-    const query = calls.find((call) => call.line.includes('data_sources'))
-    const body = JSON.parse(query.args[query.args.indexOf('-d') + 1])
-    assert.deepEqual(body.filter, {
+    assert.deepEqual(backlogFilter(), {
       and: [
-        { property: 'Project', select: { equals: 'My Thing' } },
+        { property: 'Project', relation: { contains: 'proj-1' } },
         { property: 'Status', select: { does_not_equal: 'Done' } },
       ],
     })
+  })
+
+  it('filters by name when the backlog keeps Project as a select', () => {
+    session(['pull'], happyRoutes([], SELECT_SCHEMA))
+    assert.deepEqual(backlogFilter().and[0], {
+      property: 'Project',
+      select: { equals: 'My Thing' },
+    })
+  })
+
+  it('says how to fix a project the projects database does not have', () => {
+    assert.throws(
+      () =>
+        session(
+          ['pull'],
+          happyRoutes([
+            [
+              'data_sources/ds-projects/query',
+              { has_more: false, results: [project('proj-9', 'Other')] },
+            ],
+          ]),
+        ),
+      (error) =>
+        error instanceof SessionError &&
+        /"My Thing".*add it/s.test(error.message),
+    )
+    assert.equal(existsSync(join(root, 'local', 'session')), false)
   })
 
   it('pins every board command to the configured team and channel', () => {
@@ -219,7 +272,7 @@ describe('pull', () => {
     const backlog = readLocal('backlog.md')
     assert.match(backlog, /First/)
     assert.match(backlog, /Second/)
-    const second = calls.filter((call) => call.line.includes('data_sources'))[1]
+    const second = calls.filter((call) => call.line.includes('ds-1/query'))[1]
     assert.match(second.line, /"start_cursor":"c2"/)
   })
 
@@ -367,14 +420,17 @@ describe('raise', () => {
   it('creates a Triage item for this project with no owner', () => {
     const { out } = session(
       ['raise', 'Signed-out /api/me logs a 401'],
-      [['v1/pages', { id: 'p-new', url: 'https://notion.test/p-new' }]],
+      [
+        ['v1/pages', { id: 'p-new', url: 'https://notion.test/p-new' }],
+        ...projectRoutes(),
+      ],
     )
-    const create = calls[0]
+    const create = calls.find((call) => call.line.includes('v1/pages'))
     assert.deepEqual(JSON.parse(create.args[create.args.indexOf('-d') + 1]), {
       parent: { type: 'data_source_id', data_source_id: 'ds-1' },
       properties: {
         Name: { title: [{ text: { content: 'Signed-out /api/me logs a 401' } }] },
-        Project: { select: { name: 'My Thing' } },
+        Project: { relation: [{ id: 'proj-1' }] },
         Status: { select: { name: 'Triage' } },
       },
     })
@@ -397,14 +453,16 @@ describe('raise', () => {
       [
         ['pages update p-new', {}],
         ['v1/pages', { id: 'p-new', url: 'https://notion.test/p-new' }],
+        ...projectRoutes(),
       ],
     )
+    const create = calls.find((call) => call.line.includes('v1/pages'))
     const properties = JSON.parse(
-      calls[0].args[calls[0].args.indexOf('-d') + 1],
+      create.args[create.args.indexOf('-d') + 1],
     ).properties
     assert.deepEqual(properties.Owner, { select: { name: 'Mitch' } })
     assert.deepEqual(properties.Status, { select: { name: 'Blocked' } })
-    const body = calls[1]
+    const body = calls.find((call) => call.line.includes('pages update'))
     assert.equal(
       body.args[body.args.indexOf('--content') + 1],
       'Needs a real device.',

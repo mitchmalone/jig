@@ -130,14 +130,14 @@ A project's working state lives in three stores, each with one job. The repo car
 
 | Store | Holds | Discipline |
 | --- | --- | --- |
-| **Notion — The Backlog** | Every work item, for every project | The only backlog. One shared database; a `Project` value per repo |
+| **Notion — The Backlog** | Every work item, for every project | The only backlog. One shared database; each item is related to its project |
 | **Vercel Board**, one channel per repo | Session handoffs and learnings | One thread per handoff, one per learning; labels on the thread root |
 | **`docs/DECISIONS.md`** | Lightweight ADRs | In the repo, in the commit that makes the decision. Append-only, newest first: decision, context, reasoning. Decided once — don't relitigate |
 | **`local/session/`** | This session's copy of the above, and its plan | Gitignored. Written by `/session-start`, removed by `/session-end` |
 
 Public repos add **`docs/LEARNINGS.md`**: the learnings an outside contributor needs, curated by topic. Contributors can't read the Board.
 
-`session.config.json` (committed, no secret material) names the project's Board team and channel, its Notion data source and its `Project` value. `scripts/session.mjs` is the one way a session reads and writes the stores.
+`session.config.json` (committed, no secret material) names the project's Board team and channel, the backlog's Notion data source and the project's name there. `scripts/session.mjs` is the one way a session reads and writes the stores.
 
 **One source of truth per fact.** Decisions are never repeated on the Board; work items are never tracked in the repo.
 
