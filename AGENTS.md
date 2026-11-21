@@ -137,7 +137,7 @@ A project's working state lives in three stores, each with one job. The repo car
 
 Public repos add **`docs/LEARNINGS.md`**: the learnings an outside contributor needs, curated by topic. Contributors can't read the Board.
 
-`session.config.json` (committed, no secret material) names the project's Board team and channel, the backlog's Notion data source and the project's name there. `scripts/session.mjs` is the one way a session reads and writes the stores.
+`session.config.json` (committed, no secret material) names the project's Board team and channel, the backlog's Notion data source and the project's name there. `scripts/session.mjs` is the one way a session reads and writes the stores. It and the two session commands are the jig's: they are tested in the jig, copied into a project unchanged, and replaced whole on reconciliation — fix them in the jig, never in a project.
 
 **One source of truth per fact.** Decisions are never repeated on the Board; work items are never tracked in the repo.
 
