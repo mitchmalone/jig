@@ -343,6 +343,47 @@ describe('pull', () => {
     assert.match(out, /0 startable, droid: Kaytoo/)
   })
 
+  it('ignores an Owner rollup that does not follow Project', () => {
+    const elsewhere = {
+      properties: {
+        ...RELATION_SCHEMA.properties,
+        Owner: {
+          type: 'rollup',
+          rollup: {
+            function: 'show_original',
+            relation_property_name: 'Reviewer',
+            rollup_property_name: 'Droid',
+          },
+        },
+      },
+    }
+    const { out } = session(
+      ['pull'],
+      happyRoutes(
+        [
+          ['data_sources/ds-1/query', { has_more: false, results: [] }],
+          [
+            'data_sources/ds-projects/query',
+            {
+              has_more: false,
+              results: [
+                {
+                  ...project('proj-1', 'My Thing'),
+                  properties: {
+                    ...project('proj-1', 'My Thing').properties,
+                    Droid: { type: 'relation', relation: [{ id: DROID }] },
+                  },
+                },
+              ],
+            },
+          ],
+        ],
+        elsewhere,
+      ),
+    )
+    assert.match(out, /0 startable, droid: no droid/)
+  })
+
   it('names every droid once and skips a rollup id that is not an id', () => {
     const OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
     const odd = page('77777777-7777-4777-8777-777777777777', 'Two droids', 'Ready')

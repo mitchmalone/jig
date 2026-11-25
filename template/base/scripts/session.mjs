@@ -260,7 +260,15 @@ function createStores(config, run) {
         fail(
           `more than one project is named "${name}" in the projects database: rename one`,
         )
-      const via = schema.Owner?.rollup?.rollup_property_name
+      // Read the droid through the Owner rollup only when the rollup follows
+      // Project: one pointed at another relation names a property of some
+      // other page, and reading it off the project page would be wrong.
+      const rollup = schema.Owner?.rollup
+      const viaProject =
+        rollup?.relation_property_name === 'Project' ||
+        (property.id !== undefined &&
+          rollup?.relation_property_id === property.id)
+      const via = viaProject ? rollup.rollup_property_name : undefined
       return {
         filter: { relation: { contains: matches[0].id } },
         value: { relation: [{ id: matches[0].id }] },
