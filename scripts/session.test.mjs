@@ -28,7 +28,18 @@ const CONFIG = {
 }
 const NOW = () => new Date('2026-11-21T03:00:00.000Z')
 
-const page = (id, name, status, owner = null, pr = null) => ({
+// Owner is a rollup of Project → Droid, shaped the way the Notion API returns
+// it: an array holding one relation per project, each listing droid page ids.
+const ownerRollup = (droid) => ({
+  type: 'rollup',
+  rollup: {
+    type: 'array',
+    function: 'show_original',
+    array: droid ? [{ type: 'relation', relation: [{ id: droid }] }] : [],
+  },
+})
+
+const page = (id, name, status, droid = null, pr = null) => ({
   id,
   url: `https://notion.test/${id}`,
   created_time: '2026-11-20T00:00:00.000Z',
@@ -36,7 +47,7 @@ const page = (id, name, status, owner = null, pr = null) => ({
   properties: {
     Name: { title: [{ plain_text: name }] },
     Status: { select: status ? { name: status } : null },
-    Owner: { select: owner ? { name: owner } : null },
+    Owner: ownerRollup(droid),
     Project: { select: { name: 'My Thing' } },
     'PR Link': { url: pr },
   },
@@ -89,9 +100,24 @@ const projectRoutes = (schema = RELATION_SCHEMA) => [
 const RELATION_SCHEMA = {
   properties: {
     Project: { type: 'relation', relation: { data_source_id: 'ds-projects' } },
+    Owner: {
+      type: 'rollup',
+      rollup: {
+        function: 'show_original',
+        relation_property_name: 'Project',
+        rollup_property_name: 'Droid',
+      },
+    },
   },
 }
 const SELECT_SCHEMA = { properties: { Project: { type: 'select', select: {} } } }
+
+// The project's droid, a page in the droids database the Owner rollup reads.
+const DROID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+const droidPage = (id, name) => ({
+  id,
+  properties: { Name: { type: 'title', title: [{ plain_text: name }] } },
+})
 
 const happyRoutes = (overrides = [], schema) => [
   ...overrides,
@@ -100,14 +126,15 @@ const happyRoutes = (overrides = [], schema) => [
     {
       has_more: false,
       results: [
-        page('11111111-1111-4111-8111-111111111111', 'Add the revoke button', 'Ready', 'Code Agent'),
-        page('22222222-2222-4222-8222-222222222222', 'Show who is online', 'Ready'),
-        page('33333333-3333-4333-8333-333333333333', 'Test on a real iPhone', 'Ready', 'Mitch'),
-        page('44444444-4444-4444-8444-444444444444', 'Status history view', 'In Progress', 'Code Agent'),
-        page('55555555-5555-4555-8555-555555555555', 'PR Assistant', 'Triage', 'Mitch'),
+        page('11111111-1111-4111-8111-111111111111', 'Add the revoke button', 'Ready', DROID),
+        page('22222222-2222-4222-8222-222222222222', 'Show who is online', 'Ready', DROID),
+        page('33333333-3333-4333-8333-333333333333', 'Test on a real iPhone', 'Blocked', DROID),
+        page('44444444-4444-4444-8444-444444444444', 'Status history view', 'In Progress', DROID),
+        page('55555555-5555-4555-8555-555555555555', 'PR Assistant', 'Triage', DROID),
       ],
     },
   ],
+  [`v1/pages/${DROID}`, droidPage(DROID, 'Kaytoo')],
   [
     'kind=handoff',
     {
@@ -249,10 +276,132 @@ describe('pull', () => {
     assert.match(backlog, /## Ready\n/)
     assert.match(backlog, /- \[startable\] Add the revoke button .*`11111111-1111-4111-8111-111111111111`/)
     assert.match(backlog, /- \[startable\] Show who is online .*`22222222-2222-4222-8222-222222222222`/)
-    // Ready but a person's: listed, never startable.
-    assert.match(backlog, /- Test on a real iPhone .*Mitch.*`33333333-3333-4333-8333-333333333333`/)
+    // Waiting on a person: listed, never startable.
+    assert.match(backlog, /## Blocked\n\n- Test on a real iPhone — `33333333-3333-4333-8333-333333333333`/)
     assert.ok(backlog.indexOf('## In Progress') < backlog.indexOf('## Ready'))
     assert.ok(backlog.indexOf('## Ready') < backlog.indexOf('## Triage'))
+  })
+
+  it("names the project's droid from the Owner rollup, looked up once", () => {
+    const { out } = session(['pull'])
+    assert.match(readLocal('backlog.md'), /^Droid: Kaytoo \(Owner, a read-only rollup/m)
+    assert.match(out, /2 startable, droid: Kaytoo/)
+    const lookups = calls.filter((call) => call.line.includes(`v1/pages/${DROID}`))
+    assert.equal(lookups.length, 1)
+  })
+
+  it('marks a Ready item startable when the project has no droid', () => {
+    session(
+      ['pull'],
+      happyRoutes([
+        [
+          'data_sources/ds-1/query',
+          { has_more: false, results: [page('77777777-7777-4777-8777-777777777777', 'No droid yet', 'Ready')] },
+        ],
+      ]),
+    )
+    assert.match(readLocal('backlog.md'), /- \[startable\] No droid yet/)
+    assert.match(readLocal('backlog.md'), /^Droid: no droid/m)
+    // No droid ids, so no lookup.
+    assert.equal(calls.some((call) => call.line.includes(`v1/pages/${DROID}`)), false)
+  })
+
+  it('still pulls when the droid page cannot be read, and says so', () => {
+    const { code, out } = session(
+      ['pull'],
+      happyRoutes([[`v1/pages/${DROID}`, new Error('{"code":"object_not_found"}')]]),
+    )
+    assert.equal(code, 0)
+    assert.equal(calls.filter((call) => call.line.includes(`v1/pages/${DROID}`)).length, 1)
+    assert.match(out, /droid: no droid/)
+    assert.match(out, /Could not read 1 droid page\(s\).*object_not_found/)
+    assert.match(readLocal('backlog.md'), /\[startable\] Add the revoke button/)
+  })
+
+  it("finds the droid on the project page when the project has no open items", () => {
+    const { out } = session(
+      ['pull'],
+      happyRoutes([
+        ['data_sources/ds-1/query', { has_more: false, results: [] }],
+        [
+          'data_sources/ds-projects/query',
+          {
+            has_more: false,
+            results: [
+              {
+                ...project('proj-1', 'My Thing'),
+                properties: {
+                  ...project('proj-1', 'My Thing').properties,
+                  Droid: { type: 'relation', relation: [{ id: DROID }] },
+                },
+              },
+            ],
+          },
+        ],
+      ]),
+    )
+    assert.match(out, /0 startable, droid: Kaytoo/)
+  })
+
+  it('ignores an Owner rollup that does not follow Project', () => {
+    const elsewhere = {
+      properties: {
+        ...RELATION_SCHEMA.properties,
+        Owner: {
+          type: 'rollup',
+          rollup: {
+            function: 'show_original',
+            relation_property_name: 'Reviewer',
+            rollup_property_name: 'Droid',
+          },
+        },
+      },
+    }
+    const { out } = session(
+      ['pull'],
+      happyRoutes(
+        [
+          ['data_sources/ds-1/query', { has_more: false, results: [] }],
+          [
+            'data_sources/ds-projects/query',
+            {
+              has_more: false,
+              results: [
+                {
+                  ...project('proj-1', 'My Thing'),
+                  properties: {
+                    ...project('proj-1', 'My Thing').properties,
+                    Droid: { type: 'relation', relation: [{ id: DROID }] },
+                  },
+                },
+              ],
+            },
+          ],
+        ],
+        elsewhere,
+      ),
+    )
+    assert.match(out, /0 startable, droid: no droid/)
+  })
+
+  it('names every droid once and skips a rollup id that is not an id', () => {
+    const OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    const odd = page('77777777-7777-4777-8777-777777777777', 'Two droids', 'Ready')
+    odd.properties.Owner.rollup.array = [
+      { type: 'relation', relation: [{ id: DROID }, { id: OTHER }] },
+      { type: 'relation', relation: [] },
+      { type: 'relation', relation: [{ id: '../v1/users' }] },
+    ]
+    session(
+      ['pull'],
+      happyRoutes([
+        ['data_sources/ds-1/query', { has_more: false, results: [odd, page('88888888-8888-4888-8888-888888888888', 'One', 'Todo', DROID)] }],
+        [`v1/pages/${OTHER}`, droidPage(OTHER, 'Artoo')],
+      ]),
+    )
+    assert.match(readLocal('backlog.md'), /^Droid: Kaytoo, Artoo /m)
+    assert.equal(calls.filter((call) => call.line.includes(`v1/pages/${DROID}`)).length, 1)
+    assert.equal(calls.some((call) => call.line.includes('users')), false)
   })
 
   it('writes the last handoff in full, with threads posted since', () => {
@@ -482,15 +631,13 @@ describe('start', () => {
     ['pages/11111111-1111-4111-8111-111111111111', page('11111111-1111-4111-8111-111111111111', 'Add the revoke button', status, owner)],
   ]
 
-  it('claims a Ready item for the code agent and records the claim', () => {
+  it('claims a Ready item, writes only its status, and records the claim', () => {
     session(['pull'])
-    session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Code Agent'))
+    session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', DROID))
     const patch = calls.find((call) => call.line.includes('-X PATCH'))
+    // Owner is a rollup: Notion would take the write and silently drop it.
     assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]), {
-      properties: {
-        Status: { select: { name: 'In Progress' } },
-        Owner: { select: { name: 'Code Agent' } },
-      },
+      properties: { Status: { select: { name: 'In Progress' } } },
     })
     assert.deepEqual(JSON.parse(readLocal('session.json')).claimed, [
       { id: '11111111-1111-4111-8111-111111111111', name: 'Add the revoke button' },
@@ -500,7 +647,7 @@ describe('start', () => {
   it('checks the live status, so an item another session took is refused', () => {
     session(['pull'])
     assert.throws(
-      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('In Progress', 'Code Agent')),
+      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('In Progress')),
       /In Progress/,
     )
     assert.equal(
@@ -509,44 +656,40 @@ describe('start', () => {
     )
   })
 
-  it("refuses a person's item", () => {
-    session(['pull'])
-    assert.throws(
-      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Mitch')),
-      /Mitch/,
-    )
-  })
-
   it('takes over an item when forced', () => {
     session(['pull'])
-    session(['start', '11111111-1111-4111-8111-111111111111', '--force'], live('In Progress', 'Code Agent'))
+    session(['start', '11111111-1111-4111-8111-111111111111', '--force'], live('In Progress', DROID))
     assert.ok(calls.some((call) => call.line.includes('-X PATCH')))
   })
 
-  it("refuses a person's item even when forced: it is reassigned with set first", () => {
+  it("refuses an item that waits on a person, even when forced: it is made Ready first", () => {
     session(['pull'])
-    assert.throws(
-      () => session(['start', '11111111-1111-4111-8111-111111111111', '--force'], live('Ready', 'Mitch')),
-      /belongs to Mitch/,
-    )
+    for (const status of ['Blocked', 'In Review', 'Triage', 'Todo', 'Done']) {
+      for (const force of [[], ['--force']]) {
+        assert.throws(
+          () => session(['start', '11111111-1111-4111-8111-111111111111', ...force], live(status, DROID)),
+          (error) =>
+            error instanceof SessionError &&
+            error.message.includes(`${status}, not Ready`) &&
+            error.message.includes('set <id> --status Ready') &&
+            !error.message.includes('start --force'),
+        )
+      }
+    }
     assert.equal(
       calls.some((call) => call.line.includes('-X PATCH')),
       false,
     )
   })
 
-  it('starts a person\'s item once it is reassigned to the code agent', () => {
-    session(['pull'])
-    assert.throws(
-      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Mitch')),
-      /Mitch/,
-    )
-    // The owner agreed: the agent ran `set --owner "Code Agent" --status Ready`.
-    session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', 'Code Agent'))
-    const patch = calls.find((call) => call.line.includes('-X PATCH'))
-    assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]).properties.Status, {
-      select: { name: 'In Progress' },
-    })
+  it('starts a Ready item whatever droid the project has, or none', () => {
+    for (const droid of [DROID, null]) {
+      session(['pull'])
+      session(['start', '11111111-1111-4111-8111-111111111111'], live('Ready', droid))
+      assert.ok(calls.some((call) => call.line.includes('-X PATCH')))
+      session(['discard', '--force'], live('In Progress', droid))
+      calls = []
+    }
   })
 
   it('needs a session', () => {
@@ -564,7 +707,7 @@ describe('set', () => {
 
   it('moves an item to review with its PR link', () => {
     session(['pull'])
-    session(['start', ITEM], live('Ready', 'Code Agent'))
+    session(['start', ITEM], live('Ready'))
     calls = []
     session(
       ['set', '77777777-7777-4777-8777-777777777777', '--status', 'In Review', '--pr', 'https://gh.test/pr/4'],
@@ -587,7 +730,7 @@ describe('set', () => {
 
   it("refuses to change the status of an In Progress item another session holds", () => {
     assert.throws(
-      () => session(['set', ITEM, '--owner', 'Code Agent', '--status', 'Ready'], live('In Progress', 'Code Agent')),
+      () => session(['set', ITEM, '--status', 'Ready'], live('In Progress')),
       /In Progress.*--force/s,
     )
     assert.equal(patched(), false)
@@ -596,25 +739,22 @@ describe('set', () => {
   it('refuses it inside a session that did not claim the item', () => {
     session(['pull'])
     assert.throws(
-      () => session(['set', ITEM, '--status', 'Ready'], live('In Progress', 'Code Agent')),
+      () => session(['set', ITEM, '--status', 'Ready'], live('In Progress')),
       /In Progress/,
     )
     assert.equal(patched(), false)
   })
 
   it('changes it when forced, after asking', () => {
-    session(['set', ITEM, '--status', 'Ready', '--force'], live('In Progress', 'Code Agent'))
+    session(['set', ITEM, '--status', 'Ready', '--force'], live('In Progress'))
     assert.ok(patched())
   })
 
-  it('takes a Todo item for the code agent and makes it Ready', () => {
-    session(['set', ITEM, '--owner', 'Code Agent', '--status', 'Ready'], live('Todo', 'Mitch'))
+  it('makes an agreed Todo item Ready without touching Owner', () => {
+    session(['set', ITEM, '--status', 'Ready'], live('Todo', DROID))
     const patch = calls.find((call) => call.line.includes('-X PATCH'))
     assert.deepEqual(JSON.parse(patch.args[patch.args.indexOf('-d') + 1]), {
-      properties: {
-        Status: { select: { name: 'Ready' } },
-        Owner: { select: { name: 'Code Agent' } },
-      },
+      properties: { Status: { select: { name: 'Ready' } } },
     })
   })
 
@@ -625,15 +765,20 @@ describe('set', () => {
     )
   })
 
-  it('has no owner for a named agent: Code Agent covers every agent', () => {
-    assert.throws(
-      () => session(['set', '77777777-7777-4777-8777-777777777777', '--owner', 'Beebee'], []),
-      /unknown owner "Beebee" \(have: Mitch, Code Agent\)/,
-    )
+  it("refuses --owner: Owner is the project's droid and read-only", () => {
+    for (const args of [['--owner', 'Mitch'], ['--owner=Code Agent']]) {
+      assert.throws(
+        () => session(['set', ITEM, ...args, '--status', 'Ready'], live('Todo')),
+        (error) =>
+          error instanceof SessionError &&
+          /Owner is the project's droid, a read-only rollup/.test(error.message),
+      )
+    }
+    assert.equal(calls.length, 0)
   })
 
-  it('rejects an owner the backlog does not have', () => {
-    assert.throws(() => session(['set', '77777777-7777-4777-8777-777777777777', '--owner', 'Bob'], []), /Bob/)
+  it('says what set can change when given nothing', () => {
+    assert.throws(() => session(['set', ITEM], []), /--status, --pr$/)
   })
 })
 
@@ -658,14 +803,22 @@ describe('raise', () => {
     assert.match(out, /66666666-6666-4666-8666-666666666666/)
   })
 
-  it("files something that waits on a person as theirs, with the reason in the body", () => {
+  it("refuses --owner and creates nothing", () => {
+    for (const args of [['--owner', 'Mitch'], ['--owner=Mitch'], ['--file', '--owner']]) {
+      assert.throws(
+        () => session(['raise', 'Something', ...args], projectRoutes()),
+        /read-only rollup.*--status Blocked/s,
+      )
+    }
+    assert.equal(calls.length, 0)
+  })
+
+  it("files something that waits on a person as Blocked, with the reason in the body", () => {
     writeFileSync(join(root, 'why.md'), 'Needs a real device.')
     session(
       [
         'raise',
         'Test on a real iPhone',
-        '--owner',
-        'Mitch',
         '--status',
         'Blocked',
         '--file',
@@ -681,7 +834,7 @@ describe('raise', () => {
     const properties = JSON.parse(
       create.args[create.args.indexOf('-d') + 1],
     ).properties
-    assert.deepEqual(properties.Owner, { select: { name: 'Mitch' } })
+    assert.equal(properties.Owner, undefined)
     assert.deepEqual(properties.Status, { select: { name: 'Blocked' } })
     const body = calls.find((call) => call.line.includes('pages update'))
     // One argument, so a body that starts with a dash is not read as a flag.
@@ -1074,7 +1227,7 @@ describe('closing', () => {
         ['board post', { id: 'm' }],
         [
           `pages/${READY}`,
-          page(READY, 'Add the revoke button', 'In Progress', 'Code Agent'),
+          page(READY, 'Add the revoke button', 'In Progress'),
         ],
       ],
     )
@@ -1189,7 +1342,7 @@ describe('review round two', () => {
 
   it('releases a claim when the item is set to anything else', () => {
     claim()
-    session(['set', READY, '--status', 'Ready'], item('In Progress', 'Code Agent'))
+    session(['set', READY, '--status', 'Ready'], item('In Progress'))
     assert.deepEqual(claimed(), [])
     assert.equal(session(['discard'], []).code, 0)
     assert.equal(existsSync(join(root, 'local', 'session')), false)
@@ -1198,7 +1351,7 @@ describe('review round two', () => {
   it('lets a session go when its items are no longer In Progress', () => {
     claim()
     // Someone moved it in Notion; the local record still lists the claim.
-    const { code } = session(['discard'], item('In Review', 'Code Agent'))
+    const { code } = session(['discard'], item('In Review'))
     assert.equal(code, 0)
     assert.equal(existsSync(join(root, 'local', 'session')), false)
   })
@@ -1206,7 +1359,7 @@ describe('review round two', () => {
   it('still refuses to drop a session whose item is In Progress', () => {
     claim()
     assert.throws(
-      () => session(['discard'], item('In Progress', 'Code Agent')),
+      () => session(['discard'], item('In Progress')),
       /Add the revoke button/,
     )
   })
@@ -1348,7 +1501,7 @@ describe('review round three', () => {
     writeFileSync(local('close.md'), HANDOFF)
     const { out } = session(
       ['close', '--file', 'local/session/close.md', '--state', 'paused'],
-      [['board post', { id: 'm' }], ...item('In Progress', 'Code Agent')],
+      [['board post', { id: 'm' }], ...item('In Progress')],
     )
     assert.ok(
       out.includes(
@@ -1359,10 +1512,10 @@ describe('review round three', () => {
     assert.match(out, /this session's own claims/)
   })
 
-  it('refuses to reassign an In Progress item this session does not hold', () => {
+  it('refuses to release an In Progress item this session does not hold', () => {
     session(['pull'])
     assert.throws(
-      () => session(['set', READY, '--owner', 'Mitch'], item('In Progress', 'Code Agent')),
+      () => session(['set', READY, '--status', 'Blocked'], item('In Progress')),
       /In Progress.*--force/s,
     )
     assert.equal(patched(), false)
@@ -1370,21 +1523,21 @@ describe('review round three', () => {
 
   it('refuses a PR link on an In Progress item this session does not hold', () => {
     assert.throws(
-      () => session(['set', READY, '--pr', 'https://gh.test/pr/1'], item('In Progress', 'Code Agent')),
+      () => session(['set', READY, '--pr', 'https://gh.test/pr/1'], item('In Progress')),
       /In Progress/,
     )
     assert.equal(patched(), false)
   })
 
-  it('reassigns it when forced', () => {
+  it('releases it when forced', () => {
     session(['pull'])
-    session(['set', READY, '--owner', 'Mitch', '--force'], item('In Progress', 'Code Agent'))
+    session(['set', READY, '--status', 'Blocked', '--force'], item('In Progress'))
     assert.ok(patched())
   })
 
   it("says set's refusal needs the owner of the backlog's word, and start --force takes over", () => {
     assert.throws(
-      () => session(['set', READY, '--status', 'Ready'], item('In Progress', 'Mitch')),
+      () => session(['set', READY, '--status', 'Ready'], item('In Progress')),
       /owner of the backlog.*start --force/s,
     )
   })

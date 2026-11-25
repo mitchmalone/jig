@@ -40,18 +40,18 @@ Tell the user, briefly:
 
 - **Last state:** what the last handoff says landed and what it left half-done.
 - **In flight:** items that are `In Progress` or `In Review`. An `In Progress` item is held by whoever started it. This session holds none yet, so each one belongs to another session or to one that died: say so and ask, never assume.
-- **Waiting on the user:** items they own, and anything `Blocked`.
+- **Waiting on the user:** anything `Blocked`, `In Review`, or in `Triage` (planning). The backlog's Owner is the project's droid, a read-only rollup, so status says whose turn it is, not Owner.
 - **Recommendation:** one item marked `[startable]`, or a set that is safe to run in parallel, with the reason and a short breakdown of the work.
 
 There is no priority field. Choose from what the handoff names as next, what unblocks other items, and what is small enough to finish. If nothing is startable, propose candidates from `Todo` or `Scheduled`.
 
-When the owner of the backlog agrees you take a named item (theirs included), as the standard defines agreement ("Agreement promotes" in `AGENTS.md`), make it yours, then start it (step 4): that agreement is the go for that item.
+When the owner of the backlog agrees you take a named item, as the standard defines agreement ("Agreement promotes" in `AGENTS.md`), make it `Ready`, then start it (step 4): that agreement is the go for that item.
 
 ```bash
-node scripts/session.mjs set <item-id> --owner "Code Agent" --status Ready
+node scripts/session.mjs set <item-id> --status Ready
 ```
 
-`Code Agent` is the `AGENT` name in `scripts/session.mjs`. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's item owned by `Code Agent` or nobody, and `set <id> --status <status> --force` (or `--owner`) releases or reassigns one, a person's included.
+Owner is never written: it is the project's droid, a read-only rollup of Project → Droid, and `--owner` is refused. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's `In Progress` item, and `set <id> --status <status> --force` releases one.
 
 Otherwise a recommendation is not a go: stop and wait for the owner of the backlog's explicit go.
 
@@ -63,7 +63,7 @@ On go, or on agreement to take a named item, for each item you were given:
 node scripts/session.mjs start <item-id>
 ```
 
-This re-reads the live item and refuses if it is no longer `Ready` or belongs to a person. A person's item is taken by reassigning it once they agree (above); `start --force` does not take it. Use `start --force` only after the owner of the backlog has said to take over an item another session holds.
+This re-reads the live item and refuses if it is no longer `Ready`. An item in `Triage`, `Todo` or `Scheduled`, or a `Blocked` item once it is unblocked, is taken by making it `Ready` on the owner of the backlog's agreement (above); `start --force` never takes it. Use `start --force` only after the owner of the backlog has said to take over an `In Progress` item another session holds.
 
 Write the plan to `local/session/plan.md`: goal, approach, steps, acceptance criteria. It is for this session only and is deleted at `/session-end`. Then branch (`feat/…`, `fix/…`) and build, tests first.
 
@@ -78,8 +78,8 @@ Write the plan to `local/session/plan.md`: goal, approach, steps, acceptance cri
   The headline is all the next session sees in its index, so make it findable. The body carries the fix.
 
 - **Decisions go in `docs/DECISIONS.md`**, in the commit that makes them.
-- **Work you discover but will not do now** becomes a `Triage` item: `node scripts/session.mjs raise "<title>" --file <detail.md>`. It stays there, with no owner, until the owner of the backlog promotes it or agrees you take it (above).
-- **Something only a person can do** (a device check, a secret, a decision): `node scripts/session.mjs raise "<title>" --owner <their name> --status Blocked --file <why.md>`. The owner must be one of the backlog's Owner options.
+- **Work you discover but will not do now** becomes a `Triage` item: `node scripts/session.mjs raise "<title>" --file <detail.md>`. It stays there until the owner of the backlog promotes it or agrees you take it (above).
+- **Something only a person can do** (a device check, a secret, a decision): `node scripts/session.mjs raise "<title>" --status Blocked --file <why.md>`. Open the body with the blocker kind (`decision`, `external` or `access`), then who has to act and why.
 - `--file` paths must be inside the repo, and env or credential files are refused. Write drafts under `local/`.
 - **Subagents.** The main thread plans, reviews and integrates. Give well-specified coding tasks to subagents on Opus (`model: "opus"`), and the hard ones (subtle concurrency, data migrations, security, a design with several moving parts) to Fable (`model: "fable"`). Run parallel items in separate worktrees (`isolation: "worktree"`): one item, one branch, one PR. Keep items serial when one depends on another or when they touch the same migrations, schemas or contracts.
 - **One writer.** Only the main thread runs `scripts/session.mjs` or writes to Notion or the Board. Subagents report back; they do not post.
