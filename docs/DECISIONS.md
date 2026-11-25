@@ -2,6 +2,14 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-11-26 — A droid owns a project; Owner is a read-only rollup; repo = project = droid
+
+The backlog's Owner is no longer a select of people and `Code Agent`. It is a read-only rollup of Project → Droid: each project has one droid, and every item's owner is its project's droid. `scripts/session.mjs` never writes Owner. `OWNERS`, `AGENT` and the `--owner` flag on `set` and `raise` are gone, and `--owner` now fails with a message saying Owner is the project's droid. Startable means `Ready`, with no ownership check. Status says whose turn it is: `Triage` (planning), `In Review` and `Blocked` are the owner of the backlog's; `Ready` and `In Progress` are the agent's. Work only a person can do is raised `--status Blocked`, with the blocker kind and reason in the body. `pull` reads the rollup and names the droid in its output and in `backlog.md`, looking each droid page up once and showing "no droid" when the rollup is empty or the page is unreadable. The `In Progress` lock, the session claim and the `--force` rules are unchanged, less the person-item refusal in `start`, which has nothing left to check. This supersedes the owner half of the 2026-11-21 Code Agent decision; its agreement and model rules stand.
+
+Context: Mitch changed the Notion property on 2026-11-26. The old script's `start` kept writing `Owner: Code Agent`, and Notion answered 200 with the page and the rollup unchanged: a write to a rollup is silently dropped, not refused. Nothing would ever have flagged it.
+
+Reasoning: one droid per project makes the repo, the project and the droid the same unit, so any session in the repo works that project's items and an owner per item adds nothing that the project relation does not already say. Status already carries whose turn it is. A silently dropped write is worse than an error, so the script stops making it rather than relying on Notion to complain. No droid config key: the rollup is the source of truth. Stamped projects keep their old script, which still writes Owner harmlessly, until they are reconciled.
+
 ## 2026-11-21 — Code Agent covers every agent; agreement promotes an item; Fable for hard tasks
 
 The backlog's agent owner is `Code Agent` alone, standing for every agent: the owner's orchestrating agent (Beebee) running a session, its subagents, or Claude Code run locally by a person. `Beebee` is gone from the Notion Owner options and from `OWNERS`. When the owner of the backlog agrees in a session that an agent takes an item, the agent reassigns it to `Code Agent` and makes it `Ready` itself; that agreement is the promotion. Agreement is the owner of the backlog explicitly telling the agent, in the session, to take that named item; it covers items in `Triage`, `Todo`, `Scheduled` or `Ready`, never one `In Progress`. Subagents run on Opus by default and Fable (`model: "fable"`) for hard tasks.

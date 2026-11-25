@@ -8,8 +8,8 @@
 //
 //   node scripts/session.mjs pull
 //   node scripts/session.mjs start <item-id> [--force]
-//   node scripts/session.mjs set <item-id> [--status S] [--owner O] [--pr URL] [--force]
-//   node scripts/session.mjs raise "<title>" [--owner O] [--status S] [--file body.md]
+//   node scripts/session.mjs set <item-id> [--status S] [--pr URL] [--force]
+//   node scripts/session.mjs raise "<title>" [--status S] [--file body.md]
 //   node scripts/session.mjs learn "<headline>" [--topic word] [--file body.md]
 //   node scripts/session.mjs close --file handoff.md --state <state> [--pr N] [--blocked kind]
 //   node scripts/session.mjs discard [--force]
@@ -48,11 +48,11 @@ const STATUSES = [
   'Triage',
   'Done',
 ]
-// The backlog's Owner options: the people, then Code Agent, which stands for
-// every agent (an orchestrating agent, its subagents, or a person's local
-// coding agent). A fork with other people edits these two.
-const OWNERS = ['Mitch', 'Code Agent']
-const AGENT = 'Code Agent'
+// The backlog's Owner is a rollup of Project → Droid: a droid owns a project,
+// so every item's owner is its project's droid. Notion accepts a write to a
+// rollup and silently drops it, so the script never writes Owner.
+const OWNER_IS_READ_ONLY =
+  "--owner is gone: Owner is the project's droid, a read-only rollup of Project → Droid. Leave it out; for work only a person can do, raise it with `--status Blocked` and the reason in --file."
 const STATES = ['active', 'paused', 'waiting', 'review', 'done']
 const BLOCKERS = ['decision', 'external', 'access']
 const HEADINGS = ['**Changed:**', '**Half-done:**', '**Next:**']
@@ -65,7 +65,6 @@ const NOTION_ID =
 
 const VALUE_FLAGS = [
   '--status',
-  '--owner',
   '--pr',
   '--file',
   '--topic',
@@ -86,6 +85,8 @@ function parseArgs(argv) {
         fail(`${arg} needs a value`)
       flags[arg.slice(2)] = value
     } else if (SWITCHES.includes(arg)) flags[arg.slice(2)] = true
+    else if (arg === '--owner' || arg.startsWith('--owner='))
+      fail(OWNER_IS_READ_ONLY)
     else if (arg.startsWith('--')) fail(`unknown option: ${arg}`)
     else positional.push(arg)
   }
@@ -265,6 +266,8 @@ function createStores(config, run) {
       }).map(toItem)
     },
     item: (id) => toItem(notion([`v1/pages/${id}`])),
+    // A droid's name: the title of its page in the droids database.
+    droid: (id) => titleOf(notion([`v1/pages/${id}`])),
     update: (id, properties) =>
       notion(
         [`v1/pages/${id}`, '-X', 'PATCH', '-d', JSON.stringify({ properties })],
@@ -346,10 +349,36 @@ function toItem(page) {
     dataSource: page.parent?.data_source_id ?? '',
     name: titleOf(page),
     status: properties.Status?.select?.name ?? '',
-    owner: properties.Owner?.select?.name ?? '',
+    droids: droidIds(properties.Owner),
     pr: properties['PR Link']?.url ?? '',
   }
 }
+
+// The droid page ids an Owner rollup of Project → Droid shows. Anything else
+// (no Owner, an empty rollup, an older select Owner) has none.
+const droidIds = (owner) =>
+  (owner?.rollup?.array ?? [])
+    .flatMap((entry) => entry.relation ?? [])
+    .map((relation) => relation.id)
+    .filter(Boolean)
+
+// The names of the droids that own these items, each looked up once. A droid
+// page the integration cannot read is left out: the droid is shown, not
+// needed.
+function droidNames(items, stores) {
+  const names = []
+  for (const id of new Set(items.flatMap((item) => item.droids))) {
+    try {
+      const name = stores.droid(id).trim()
+      if (name && !names.includes(name)) names.push(name)
+    } catch (error) {
+      if (!(error instanceof SessionError)) throw error
+    }
+  }
+  return names
+}
+
+const droidLabel = (names) => names.join(', ') || 'no droid'
 
 const select = (name) => ({ select: { name } })
 
@@ -357,17 +386,19 @@ const select = (name) => ({ select: { name } })
 const postedId = (answer) =>
   JSON.stringify(answer).match(/msg_[A-Za-z0-9_-]+/)?.[0] ?? ''
 
-const isStartable = (item) =>
-  item.status === 'Ready' && (item.owner === '' || item.owner === AGENT)
+// Repo = project = droid: whoever runs a session here works this project's
+// items, so any Ready item may start. In Progress is the lock.
+const isStartable = (item) => item.status === 'Ready'
 
 const firstLine = (text) => text.split('\n')[0].trim()
 
-function renderBacklog(items, config, pulledAt) {
+function renderBacklog(items, droids, config, pulledAt) {
   const lines = [
     `# Backlog — ${config.backlog.project}`,
     '',
+    `Droid: ${droidLabel(droids)} (Owner, a read-only rollup of Project → Droid).`,
     `Pulled ${pulledAt} from Notion. A copy: change items with \`node scripts/session.mjs set\`, not here.`,
-    `\`[startable]\` marks Ready items owned by ${AGENT} or nobody. Done is left out.`,
+    '`[startable]` marks Ready items. Done is left out.',
   ]
   if (items.length === 0) lines.push('', 'No open items.')
   for (const status of [...STATUSES, '']) {
@@ -376,9 +407,8 @@ function renderBacklog(items, config, pulledAt) {
     lines.push('', `## ${status || 'No status'}`, '')
     for (const item of group) {
       const marker = isStartable(item) ? '[startable] ' : ''
-      const owner = item.owner || 'unowned'
       const pr = item.pr ? ` — ${item.pr}` : ''
-      lines.push(`- ${marker}${item.name} — ${owner}${pr} — \`${item.id}\``)
+      lines.push(`- ${marker}${item.name}${pr} — \`${item.id}\``)
     }
   }
   return lines.join('\n') + '\n'
@@ -559,6 +589,7 @@ function pull({ dir, config, stores, now, log }) {
   // Fetch everything before writing anything: a half-written reference would
   // pass for a whole one.
   const items = stores.backlog(stores.project())
+  const droids = droidNames(items, stores)
 
   // The board lists threads by latest activity, so a replied-to handoff can
   // sort ahead of a newer one: take many and pick by creation time.
@@ -591,7 +622,7 @@ function pull({ dir, config, stores, now, log }) {
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, 'backlog.md'),
-    renderBacklog(items, config, startedAt),
+    renderBacklog(items, droids, config, startedAt),
   )
   writeFileSync(
     join(dir, 'handoff.md'),
@@ -602,7 +633,7 @@ function pull({ dir, config, stores, now, log }) {
 
   const startable = items.filter(isStartable).length
   log(
-    `Pulled ${items.length} open items (${startable} startable) and ${learnings.length} learnings into local/session/.`,
+    `Pulled ${items.length} open items (${startable} startable, droid: ${droidLabel(droids)}) and ${learnings.length} learnings into local/session/.`,
   )
   if (handoffs.isMissing)
     log(
@@ -626,14 +657,7 @@ function start({ dir, config, stores, log }, [rawId], flags) {
     fail(
       `"${item.name}" is ${item.status || 'without a status'}, not Ready. Another session may hold it: take it over only on the owner of the backlog's word, with \`start --force\`.`,
     )
-  // --force takes over another session's lock, never a person's item: that is
-  // released or reassigned with `set --force`, on the owner of the backlog's
-  // word.
-  if (item.owner && item.owner !== AGENT)
-    fail(
-      `"${item.name}" belongs to ${item.owner}, not to ${AGENT}. Once they agree, reassign it with \`set <id> --owner "${AGENT}" --status Ready\`.`,
-    )
-  stores.update(id, { Status: select('In Progress'), Owner: select(AGENT) })
+  stores.update(id, { Status: select('In Progress') })
   record(dir, `start ${id}: ${item.name}`, (state) => {
     if (!state.claimed.some((claim) => claim.id === id))
       state.claimed.push({ id, name: item.name })
@@ -648,20 +672,18 @@ function set({ dir, config, stores, log }, [rawId], flags) {
     fail('In Progress is the lock: take it with `start`, which checks it first')
   const changes = [
     flags.status && ['Status', oneOf(flags.status, STATUSES, 'status')],
-    flags.owner && ['Owner', oneOf(flags.owner, OWNERS, 'owner')],
     flags.pr && ['PR Link', flags.pr],
   ].filter(Boolean)
-  if (changes.length === 0)
-    fail('set needs at least one of --status, --owner, --pr')
+  if (changes.length === 0) fail('set needs at least one of --status, --pr')
   const item = stores.item(id)
   if (item.dataSource !== config.backlog.dataSource)
     fail(`"${item.name}" is not in this project's backlog`)
-  // Changing an In Progress item releases or reassigns the lock, so only the
-  // session that holds it does that without the owner of the backlog's word.
+  // Changing an In Progress item releases the lock, so only the session that
+  // holds it does that without the owner of the backlog's word.
   const ours = loadState(dir)?.claimed.some((claim) => claim.id === id)
   if (item.status === 'In Progress' && !ours && !flags.force)
     fail(
-      `"${item.name}" is In Progress and this session does not hold it. Release or reassign it only on the owner of the backlog's word, with \`set --force\`; to take over another session's agent item, use \`start --force\`.`,
+      `"${item.name}" is In Progress and this session does not hold it. Release it only on the owner of the backlog's word, with \`set --force\`; to take it over, use \`start --force\`.`,
     )
   stores.update(
     id,
@@ -689,7 +711,6 @@ function raise({ root, dir, stores, log }, [title], flags) {
     Name: { title: [{ text: { content: title } }] },
     Project: stores.project().value,
     Status: select(status),
-    ...(flags.owner && { Owner: select(oneOf(flags.owner, OWNERS, 'owner')) }),
   }
   const body = flags.file && readText(root, flags.file)
   const created = stores.create(properties)

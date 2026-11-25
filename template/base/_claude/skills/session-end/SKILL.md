@@ -27,7 +27,7 @@ The next session starts from what this one leaves on the Board and in Notion. No
 
 Leave an item `In Progress` only if a session will carry straight on with it. A stale `In Progress` locks the item against every later session.
 
-**New items:** anything discovered and not yet raised. Agent-raised work is `Triage` with no owner; a step only the user can take is theirs, `Blocked` if it holds up agent work.
+**New items:** anything discovered and not yet raised. Agent-raised work is `Triage`; a step only the user can take is `Blocked`, with the blocker kind (`decision`, `external` or `access`) and the reason in its body. Owner is the project's droid, a read-only rollup: never set it.
 
 **Learnings:** any that were not posted as they happened.
 
@@ -63,7 +63,7 @@ If there is a `docs/LEARNINGS.md` entry, add it and commit it to the branch firs
 
 ```bash
 node scripts/session.mjs set <item-id> --status "<status>" [--pr <url>]
-node scripts/session.mjs raise "<title>" [--owner <person> --status Blocked] [--file <detail.md>]
+node scripts/session.mjs raise "<title>" [--status Blocked] [--file <detail.md>]
 node scripts/session.mjs learn "<headline>" [--topic <word>] [--file <fix.md>]
 node scripts/session.mjs close --file local/session/close.md --state <state> [--pr <n>] [--blocked <kind>]
 ```
