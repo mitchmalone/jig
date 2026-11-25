@@ -51,7 +51,7 @@ When the owner of the backlog agrees you take a named item, as the standard defi
 node scripts/session.mjs set <item-id> --status Ready
 ```
 
-Owner is never written: it is the project's droid, a read-only rollup of Project → Droid, and `--owner` is refused. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's item, and `set <id> --status <status> --force` releases one.
+Owner is never written: it is the project's droid, a read-only rollup of Project → Droid, and `--owner` is refused. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's `In Progress` item, and `set <id> --status <status> --force` releases one.
 
 Otherwise a recommendation is not a go: stop and wait for the owner of the backlog's explicit go.
 
