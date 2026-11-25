@@ -52,7 +52,8 @@ const STATUSES = [
 // so every item's owner is its project's droid. Notion accepts a write to a
 // rollup and silently drops it, so the script never writes Owner.
 const OWNER_IS_READ_ONLY =
-  "--owner is gone: Owner is the project's droid, a read-only rollup of Project → Droid. Leave it out; for work only a person can do, raise it with `--status Blocked` and the reason in --file."
+  "Owner is the project's droid, a read-only rollup of Project → Droid: leave --owner out. For work only a person can do, raise it with `--status Blocked` and the blocker kind and reason in `--file`."
+const isOwnerFlag = (arg) => arg === '--owner' || arg.startsWith('--owner=')
 const STATES = ['active', 'paused', 'waiting', 'review', 'done']
 const BLOCKERS = ['decision', 'external', 'access']
 const HEADINGS = ['**Changed:**', '**Half-done:**', '**Next:**']
@@ -80,13 +81,13 @@ function parseArgs(argv) {
     const arg = argv[i]
     if (VALUE_FLAGS.includes(arg)) {
       const value = argv[++i]
+      if (value !== undefined && isOwnerFlag(value)) fail(OWNER_IS_READ_ONLY)
       // A flag is never a value: `--pr --status Done` is a forgotten URL.
       if (value === undefined || value.startsWith('--'))
         fail(`${arg} needs a value`)
       flags[arg.slice(2)] = value
     } else if (SWITCHES.includes(arg)) flags[arg.slice(2)] = true
-    else if (arg === '--owner' || arg.startsWith('--owner='))
-      fail(OWNER_IS_READ_ONLY)
+    else if (isOwnerFlag(arg)) fail(OWNER_IS_READ_ONLY)
     else if (arg.startsWith('--')) fail(`unknown option: ${arg}`)
     else positional.push(arg)
   }
@@ -224,12 +225,21 @@ function createStores(config, run) {
     // simpler backlog, a select). Either way the config holds the name; this
     // turns it into the filter that finds the project's items and the value
     // that files a new one under it.
+    // For a relation, it also returns the project's droid ids, read from the
+    // project page through the relation the Owner rollup follows, so the
+    // droid is known even when the project has no open items.
     project() {
       const name = config.backlog.project.trim()
-      const property = notion([`v1/data_sources/${config.backlog.dataSource}`])
-        .properties?.Project
+      const schema =
+        notion([`v1/data_sources/${config.backlog.dataSource}`]).properties ??
+        {}
+      const property = schema.Project
       if (property?.type === 'select')
-        return { filter: { select: { equals: name } }, value: select(name) }
+        return {
+          filter: { select: { equals: name } },
+          value: select(name),
+          droids: [],
+        }
       if (property?.type !== 'relation')
         fail(
           'the backlog has no Project property that is a relation or a select',
@@ -250,9 +260,11 @@ function createStores(config, run) {
         fail(
           `more than one project is named "${name}" in the projects database: rename one`,
         )
+      const via = schema.Owner?.rollup?.rollup_property_name
       return {
         filter: { relation: { contains: matches[0].id } },
         value: { relation: [{ id: matches[0].id }] },
+        droids: notionIds(via && matches[0].properties?.[via]?.relation),
       }
     },
     backlog(project) {
@@ -354,28 +366,34 @@ function toItem(page) {
   }
 }
 
-// The droid page ids an Owner rollup of Project → Droid shows. Anything else
-// (no Owner, an empty rollup, an older select Owner) has none.
-const droidIds = (owner) =>
-  (owner?.rollup?.array ?? [])
-    .flatMap((entry) => entry.relation ?? [])
-    .map((relation) => relation.id)
-    .filter(Boolean)
+// The page ids in a relation value. They go into an API path, so anything
+// that is not an id is dropped.
+const notionIds = (relation) =>
+  (Array.isArray(relation) ? relation : [])
+    .map((entry) => entry?.id)
+    .filter((id) => typeof id === 'string' && NOTION_ID.test(id))
 
-// The names of the droids that own these items, each looked up once. A droid
-// page the integration cannot read is left out: the droid is shown, not
-// needed.
-function droidNames(items, stores) {
+// The droid page ids an Owner rollup of Project → Droid shows. Anything else
+// (no Owner, an empty rollup, an older select Owner) has none. Notion cuts a
+// page's relations off at 25; one droid per project keeps far below that.
+const droidIds = (owner) =>
+  (owner?.rollup?.array ?? []).flatMap((entry) => notionIds(entry?.relation))
+
+// The droids' names, each page looked up once, and how many could not be
+// read. An unreadable droid is left out: the droid is shown, not needed.
+function droidNames(ids, stores) {
   const names = []
-  for (const id of new Set(items.flatMap((item) => item.droids))) {
+  const failures = []
+  for (const id of new Set(ids)) {
     try {
       const name = stores.droid(id).trim()
       if (name && !names.includes(name)) names.push(name)
     } catch (error) {
       if (!(error instanceof SessionError)) throw error
+      failures.push(error.message)
     }
   }
-  return names
+  return { names, failures }
 }
 
 const droidLabel = (names) => names.join(', ') || 'no droid'
@@ -588,8 +606,12 @@ function pull({ dir, config, stores, now, log }) {
 
   // Fetch everything before writing anything: a half-written reference would
   // pass for a whole one.
-  const items = stores.backlog(stores.project())
-  const droids = droidNames(items, stores)
+  const project = stores.project()
+  const items = stores.backlog(project)
+  const { names: droids, failures } = droidNames(
+    [...project.droids, ...items.flatMap((item) => item.droids)],
+    stores,
+  )
 
   // The board lists threads by latest activity, so a replied-to handoff can
   // sort ahead of a newer one: take many and pick by creation time.
@@ -635,6 +657,10 @@ function pull({ dir, config, stores, now, log }) {
   log(
     `Pulled ${items.length} open items (${startable} startable, droid: ${droidLabel(droids)}) and ${learnings.length} learnings into local/session/.`,
   )
+  if (failures.length > 0)
+    log(
+      `Could not read ${failures.length} droid page(s), so the droid may be missing (${failures[0]}).`,
+    )
   if (handoffs.isMissing)
     log(
       `The board has no "${config.board.channel}" channel yet: a new project, or a wrong name in session.config.json.`,
@@ -653,9 +679,15 @@ function start({ dir, config, stores, log }, [rawId], flags) {
   const item = stores.item(id)
   if (item.dataSource !== config.backlog.dataSource)
     fail(`"${item.name}" is not in this project's backlog`)
-  if (!flags.force && item.status !== 'Ready')
+  // --force takes over another session's lock and nothing else: an item that
+  // waits on a person, or is not yet agreed, is made Ready first.
+  if (item.status === 'In Progress' && !flags.force)
     fail(
-      `"${item.name}" is ${item.status || 'without a status'}, not Ready. Another session may hold it: take it over only on the owner of the backlog's word, with \`start --force\`.`,
+      `"${item.name}" is In Progress, not Ready. Another session may hold it: take it over only on the owner of the backlog's word, with \`start --force\`.`,
+    )
+  if (item.status !== 'In Progress' && item.status !== 'Ready')
+    fail(
+      `"${item.name}" is ${item.status || 'without a status'}, not Ready. Once the owner of the backlog agrees, make it Ready with \`set <id> --status Ready\`.`,
     )
   stores.update(id, { Status: select('In Progress') })
   record(dir, `start ${id}: ${item.name}`, (state) => {

@@ -63,7 +63,7 @@ On go, or on agreement to take a named item, for each item you were given:
 node scripts/session.mjs start <item-id>
 ```
 
-This re-reads the live item and refuses if it is no longer `Ready`. An item waiting on a person (`Blocked`, `In Review`, `Triage`) is taken by making it `Ready` once they agree (above). Use `start --force` only after the owner of the backlog has said to take over an item another session holds.
+This re-reads the live item and refuses if it is no longer `Ready`. An item in `Triage`, `Todo` or `Scheduled`, or a `Blocked` item once it is unblocked, is taken by making it `Ready` on the owner of the backlog's agreement (above); `start --force` never takes it. Use `start --force` only after the owner of the backlog has said to take over an `In Progress` item another session holds.
 
 Write the plan to `local/session/plan.md`: goal, approach, steps, acceptance criteria. It is for this session only and is deleted at `/session-end`. Then branch (`feat/…`, `fix/…`) and build, tests first.
 

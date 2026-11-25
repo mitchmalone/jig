@@ -100,6 +100,14 @@ const projectRoutes = (schema = RELATION_SCHEMA) => [
 const RELATION_SCHEMA = {
   properties: {
     Project: { type: 'relation', relation: { data_source_id: 'ds-projects' } },
+    Owner: {
+      type: 'rollup',
+      rollup: {
+        function: 'show_original',
+        relation_property_name: 'Project',
+        rollup_property_name: 'Droid',
+      },
+    },
   },
 }
 const SELECT_SCHEMA = { properties: { Project: { type: 'select', select: {} } } }
@@ -298,14 +306,61 @@ describe('pull', () => {
     assert.equal(calls.some((call) => call.line.includes(`v1/pages/${DROID}`)), false)
   })
 
-  it('still pulls when the droid page cannot be read', () => {
+  it('still pulls when the droid page cannot be read, and says so', () => {
     const { code, out } = session(
       ['pull'],
       happyRoutes([[`v1/pages/${DROID}`, new Error('{"code":"object_not_found"}')]]),
     )
     assert.equal(code, 0)
+    assert.equal(calls.filter((call) => call.line.includes(`v1/pages/${DROID}`)).length, 1)
     assert.match(out, /droid: no droid/)
+    assert.match(out, /Could not read 1 droid page\(s\).*object_not_found/)
     assert.match(readLocal('backlog.md'), /\[startable\] Add the revoke button/)
+  })
+
+  it("finds the droid on the project page when the project has no open items", () => {
+    const { out } = session(
+      ['pull'],
+      happyRoutes([
+        ['data_sources/ds-1/query', { has_more: false, results: [] }],
+        [
+          'data_sources/ds-projects/query',
+          {
+            has_more: false,
+            results: [
+              {
+                ...project('proj-1', 'My Thing'),
+                properties: {
+                  ...project('proj-1', 'My Thing').properties,
+                  Droid: { type: 'relation', relation: [{ id: DROID }] },
+                },
+              },
+            ],
+          },
+        ],
+      ]),
+    )
+    assert.match(out, /0 startable, droid: Kaytoo/)
+  })
+
+  it('names every droid once and skips a rollup id that is not an id', () => {
+    const OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    const odd = page('77777777-7777-4777-8777-777777777777', 'Two droids', 'Ready')
+    odd.properties.Owner.rollup.array = [
+      { type: 'relation', relation: [{ id: DROID }, { id: OTHER }] },
+      { type: 'relation', relation: [] },
+      { type: 'relation', relation: [{ id: '../v1/users' }] },
+    ]
+    session(
+      ['pull'],
+      happyRoutes([
+        ['data_sources/ds-1/query', { has_more: false, results: [odd, page('88888888-8888-4888-8888-888888888888', 'One', 'Todo', DROID)] }],
+        [`v1/pages/${OTHER}`, droidPage(OTHER, 'Artoo')],
+      ]),
+    )
+    assert.match(readLocal('backlog.md'), /^Droid: Kaytoo, Artoo /m)
+    assert.equal(calls.filter((call) => call.line.includes(`v1/pages/${DROID}`)).length, 1)
+    assert.equal(calls.some((call) => call.line.includes('users')), false)
   })
 
   it('writes the last handoff in full, with threads posted since', () => {
@@ -566,12 +621,20 @@ describe('start', () => {
     assert.ok(calls.some((call) => call.line.includes('-X PATCH')))
   })
 
-  it("refuses an item that waits on a person: it is not Ready", () => {
+  it("refuses an item that waits on a person, even when forced: it is made Ready first", () => {
     session(['pull'])
-    assert.throws(
-      () => session(['start', '11111111-1111-4111-8111-111111111111'], live('Blocked', DROID)),
-      /Blocked, not Ready/,
-    )
+    for (const status of ['Blocked', 'In Review', 'Triage', 'Todo', 'Done']) {
+      for (const force of [[], ['--force']]) {
+        assert.throws(
+          () => session(['start', '11111111-1111-4111-8111-111111111111', ...force], live(status, DROID)),
+          (error) =>
+            error instanceof SessionError &&
+            error.message.includes(`${status}, not Ready`) &&
+            error.message.includes('set <id> --status Ready') &&
+            !error.message.includes('start --force'),
+        )
+      }
+    }
     assert.equal(
       calls.some((call) => call.line.includes('-X PATCH')),
       false,
@@ -700,10 +763,12 @@ describe('raise', () => {
   })
 
   it("refuses --owner and creates nothing", () => {
-    assert.throws(
-      () => session(['raise', 'Something', '--owner', 'Mitch'], projectRoutes()),
-      /read-only rollup.*--status Blocked/s,
-    )
+    for (const args of [['--owner', 'Mitch'], ['--owner=Mitch'], ['--file', '--owner']]) {
+      assert.throws(
+        () => session(['raise', 'Something', ...args], projectRoutes()),
+        /read-only rollup.*--status Blocked/s,
+      )
+    }
     assert.equal(calls.length, 0)
   })
 
