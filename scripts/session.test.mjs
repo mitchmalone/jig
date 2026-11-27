@@ -20,10 +20,18 @@ import { fileURLToPath } from 'node:url'
 import { SessionError, defaultRun, main } from '../template/base/scripts/session.mjs'
 
 const scratch = mkdtempSync(join(tmpdir(), 'jig-session-'))
+
+// The environment for a script run as a child: it names an agent, and drops
+// GIT_*, which git exports to hooks (GIT_DIR in a worktree) and which would
+// point the child's git at the jig instead of its temp repo.
+const childEnv = Object.fromEntries([
+  ...Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+  ['JIG_AGENT', 'kaytoo'],
+])
 after(() => rmSync(scratch, { recursive: true, force: true }))
 
 const CONFIG = {
-  board: { scope: 'acme', channel: 'my-thing', profile: 'claude' },
+  board: { scope: 'acme', channel: 'my-thing' },
   backlog: { dataSource: 'ds-1', project: 'My Thing' },
 }
 const NOW = () => new Date('2026-11-21T03:00:00.000Z')
@@ -194,13 +202,14 @@ const happyRoutes = (overrides = [], schema) => [
   ...projectRoutes(schema),
 ]
 
-function session(argv, routes = happyRoutes()) {
+function session(argv, routes = happyRoutes(), env = { JIG_AGENT: 'kaytoo' }) {
   const out = []
   const code = main(argv, {
     root,
     now: NOW,
     run: fakeRun(routes),
     log: (line) => out.push(line),
+    env,
   })
   return { code, out: out.join('\n') }
 }
@@ -863,7 +872,7 @@ describe('learn', () => {
     )
     assert.match(post.line, /--label kind=learning/)
     assert.match(post.line, /--label topic=realtime/)
-    assert.match(post.line, /--as claude/)
+    assert.match(post.line, /--as kaytoo/)
     assert.match(post.line, /--scope acme/)
   })
 
@@ -993,6 +1002,7 @@ describe('as a command', () => {
     const result = spawnSync(process.execPath, [script, 'pull'], {
       cwd: root,
       encoding: 'utf8',
+      env: childEnv,
     })
     assert.equal(result.status, 1)
     assert.match(result.stderr, /^error: no session\.config\.json/)
@@ -1005,6 +1015,7 @@ describe('as a command', () => {
     const result = spawnSync(process.execPath, [link, 'nonsense'], {
       cwd: root,
       encoding: 'utf8',
+      env: childEnv,
     })
     assert.equal(result.status, 1)
     assert.match(result.stderr, /usage: session\.mjs/)
@@ -1268,13 +1279,89 @@ describe('settings and state files', () => {
     )
   })
 
-  it('posts as claude unless told otherwise', () => {
+  it('posts as the agent JIG_AGENT names', () => {
+    session(['learn', 'x'], [['board post', { id: 'm' }]], { JIG_AGENT: 'artoo' })
+    assert.match(calls[0].line, /--as artoo(\s|$)/)
+  })
+
+  it('says in pull who its posts go out as', () => {
+    const { out } = session(['pull'], happyRoutes(), { JIG_AGENT: 'beebee' })
+    assert.match(out, /Board posts go out as beebee/)
+  })
+
+  it('runs nothing when JIG_AGENT is unset, so nobody posts as a default', () => {
+    for (const env of [{}, { JIG_AGENT: '' }])
+      assert.throws(
+        () => session(['learn', 'x'], [['board post', { id: 'm' }]], env),
+        (error) =>
+          error instanceof SessionError && /JIG_AGENT is not set/.test(error.message),
+      )
+    assert.throws(() => session(['pull'], happyRoutes(), {}), /JIG_AGENT is not set/)
+    assert.equal(calls.length, 0)
+  })
+
+  it('accepts hyphenated names up to 32 long', () => {
+    for (const agent of ['r2-d2', 'a'.repeat(32)]) {
+      calls = []
+      session(['learn', 'x'], [['board post', { id: 'm' }]], { JIG_AGENT: agent })
+      assert.match(calls[0].line, new RegExp(`--as ${agent}(\\s|$)`))
+    }
+  })
+
+  it('refuses a JIG_AGENT that is not a plain agent name', () => {
+    for (const agent of [
+      'Beebee',
+      'bee bee',
+      '--label',
+      'a/b',
+      '1droid',
+      'bee-',
+      'a--b',
+      'beebee\n',
+      'a'.repeat(33),
+    ])
+      assert.throws(
+        () => session(['learn', 'x'], [['board post', { id: 'm' }]], { JIG_AGENT: agent }),
+        /is not an agent name/,
+      )
+    assert.equal(calls.length, 0)
+  })
+
+  it('refuses a settings file that still names a board.profile', () => {
     writeFileSync(
       join(root, 'session.config.json'),
-      JSON.stringify({ ...CONFIG, board: { scope: 'acme', channel: 'my-thing' } }),
+      JSON.stringify({ ...CONFIG, board: { ...CONFIG.board, profile: 'claude' } }),
     )
-    session(['learn', 'x'], [['board post', { id: 'm' }]])
-    assert.match(calls[0].line, /--as claude/)
+    assert.throws(() => session(['pull']), /board\.profile, which is gone/)
+    assert.equal(calls.length, 0)
+  })
+
+  it('reports an unclosed session without JIG_AGENT, so recovery can start', () => {
+    session(['pull'])
+    calls = []
+    const { code, out } = session(['pull'], happyRoutes(), {})
+    assert.equal(code, 2)
+    assert.match(out, /Unclosed session/)
+    assert.equal(calls.length, 0)
+  })
+
+  it('runs the Notion-only commands recovery needs without JIG_AGENT', () => {
+    session(['raise', 'A new bug'], [
+      ['v1/pages', { id: '66666666-6666-4666-8666-666666666666' }],
+      ...projectRoutes(),
+    ], {})
+    assert.ok(calls.some((call) => call.line.includes('v1/pages')))
+  })
+
+  it('refuses to close without JIG_AGENT: a handoff must name its author', () => {
+    session(['pull'])
+    writeFileSync(local('close.md'), '**Changed:** x\n**Half-done:** y\n**Next:** z')
+    calls = []
+    assert.throws(
+      () => session(['close', '--file', local('close.md'), '--state', 'done'], [], {}),
+      /JIG_AGENT is not set/,
+    )
+    assert.equal(calls.length, 0)
   })
 
   it('reports a damaged session record instead of crashing', () => {
@@ -1459,11 +1546,12 @@ describe('review round two', () => {
       '../template/base/scripts/session.mjs',
     )
     const inSubdirectory = (...args) => {
-      spawnSync('git', ['init', '-q'], { cwd: root })
+      spawnSync('git', ['init', '-q'], { cwd: root, env: childEnv })
       mkdirSync(join(root, 'apps', 'web'), { recursive: true })
       return spawnSync(process.execPath, [script, ...args], {
         cwd: join(root, 'apps', 'web'),
         encoding: 'utf8',
+        env: childEnv,
       })
     }
 

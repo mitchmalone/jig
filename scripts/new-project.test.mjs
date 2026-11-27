@@ -233,7 +233,7 @@ describe('session system', () => {
   it('points the project at its own channel and backlog entries', () => {
     const dir = stampOk('my-thing', ['--title', 'MyThing'])
     assert.deepEqual(JSON.parse(read(dir, 'session.config.json')), {
-      board: { scope: 'ramenamok', channel: 'my-thing', profile: 'claude' },
+      board: { scope: 'ramenamok', channel: 'my-thing' },
       backlog: {
         dataSource: '41f3d7d1-79ad-8045-a361-000b56ae7f12',
         project: 'MyThing',

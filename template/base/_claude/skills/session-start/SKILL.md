@@ -20,7 +20,8 @@ node scripts/session.mjs pull
   3. Close it the way `/session-end` does, covering only what is not already written: draft, show, write on confirmation, `close` last.
   4. If the user says it left nothing worth recording, set each claimed item to where it stands (`node scripts/session.mjs set <item-id> --status Ready`), then run `node scripts/session.mjs discard`. Setting an item's status releases its claim. `discard` refuses only while a claimed item is still `In Progress` in the backlog, because that locks it against every later session. If `session.json` was unreadable, its claims are lost: `set` sees none and `discard` checks none. Find the dead session's `In Progress` items in the backlog, confirm them with the user, and on their word release each with `node scripts/session.mjs set <item-id> --status Ready --force`.
   5. Pull again.
-- **Exit 1:** Notion or the Board did not answer. Stop and tell the user what failed. Do not start work from memory or from the repo alone: without the backlog you cannot know what another session holds.
+- **Exit 1, "JIG_AGENT" or "board.profile":** the session doesn't know who you are. Nothing was fetched or written. Set `JIG_AGENT` to your agent name in your own environment (never in the repo), or delete `board.profile` from `session.config.json`, then pull again. Board posts carry that name.
+- **Exit 1, anything else:** Notion or the Board did not answer. Stop and tell the user what failed. Do not start work from memory or from the repo alone: without the backlog you cannot know what another session holds.
 
 ## 2. Orient
 
