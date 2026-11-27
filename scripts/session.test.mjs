@@ -1300,6 +1300,14 @@ describe('settings and state files', () => {
     assert.equal(calls.length, 0)
   })
 
+  it('accepts hyphenated names up to 32 long', () => {
+    for (const agent of ['r2-d2', 'a'.repeat(32)]) {
+      calls = []
+      session(['learn', 'x'], [['board post', { id: 'm' }]], { JIG_AGENT: agent })
+      assert.match(calls[0].line, new RegExp(`--as ${agent}(\\s|$)`))
+    }
+  })
+
   it('refuses a JIG_AGENT that is not a plain agent name', () => {
     for (const agent of [
       'Beebee',

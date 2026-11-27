@@ -16,7 +16,7 @@
 //
 // Settings come from session.config.json at the repo root. The agent running
 // the session names itself in JIG_AGENT (beebee, artoo, claude, ...): every
-// Board post is written as that profile, and nothing runs without it.
+// Board post is written as that profile; pull, learn and close refuse without it.
 // Zero dependencies.
 // Exit codes: 0 ok, 1 failed, 2 an earlier session was never closed.
 import { execFileSync } from 'node:child_process'
@@ -550,7 +550,10 @@ function loadAgent(env) {
 const needsAgent = (command, dir) =>
   command === 'learn' ||
   command === 'close' ||
-  (command === 'pull' && !(existsSync(dir) && readdirSync(dir).length > 0))
+  (command === 'pull' && !hasUnclosed(dir))
+
+// An earlier session that was never closed left its copy behind.
+const hasUnclosed = (dir) => existsSync(dir) && readdirSync(dir).length > 0
 
 // The session record, or undefined when there is no usable one.
 function loadState(dir) {
@@ -640,8 +643,7 @@ function reportUnclosed(dir, log) {
 }
 
 function pull({ dir, config, stores, now, log }) {
-  if (existsSync(dir) && readdirSync(dir).length > 0)
-    return reportUnclosed(dir, log)
+  if (hasUnclosed(dir)) return reportUnclosed(dir, log)
 
   // Fetch everything before writing anything: a half-written reference would
   // pass for a whole one.
