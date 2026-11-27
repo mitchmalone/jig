@@ -382,6 +382,45 @@ describe('re-stamp', () => {
     restampOk(dir, ['--apply', '--force'])
     assert.notEqual(read(dir, 'scripts/session.mjs'), '// hand-edited\n')
   })
+
+  // Run from a git hook, GIT_DIR (and more, in a worktree) points at the
+  // hook's repo: the dirty check must still read the project's.
+  it("checks the project's repo, not the one a calling git hook points at", () => {
+    const identity = ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid']
+    const gitIn = (cwd, ...args) =>
+      spawnSync('git', [...identity, ...args], { cwd, env, encoding: 'utf8' })
+    const sentinel = join(scratch, `sentinel-${counter++}`)
+    mkdirSync(sentinel)
+    gitIn(sentinel, 'init', '-q', '-b', 'main')
+    gitIn(sentinel, 'commit', '-q', '--allow-empty', '--no-verify', '-m', 'sentinel')
+    const head = gitIn(sentinel, 'rev-parse', 'HEAD').stdout.trim()
+    const config = read(sentinel, '.git/config')
+
+    const dir = stamp(PNPM)
+    gitIn(dir, 'init', '-q', '-b', 'main')
+    gitIn(dir, 'add', '-A')
+    gitIn(dir, 'commit', '-q', '--no-verify', '-m', 'chore: stamp')
+    write(dir, 'scripts/session.mjs', '// hand-edited\n')
+    const result = spawnSync(
+      process.execPath,
+      [join(jigRoot, 'scripts', 'restamp.mjs'), dir, '--apply'],
+      {
+        encoding: 'utf8',
+        env: {
+          ...env,
+          GIT_DIR: join(sentinel, '.git'),
+          GIT_WORK_TREE: sentinel,
+          GIT_INDEX_FILE: join(sentinel, '.git', 'index'),
+          GIT_COMMON_DIR: join(sentinel, '.git'),
+        },
+      },
+    )
+    assert.notEqual(result.status, 0, result.stdout)
+    assert.match(result.stderr, /uncommitted/)
+    assert.equal(read(dir, 'scripts/session.mjs'), '// hand-edited\n')
+    assert.equal(gitIn(sentinel, 'rev-parse', 'HEAD').stdout.trim(), head)
+    assert.equal(read(sentinel, '.git/config'), config)
+  })
 })
 
 describe('migrations', () => {

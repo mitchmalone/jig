@@ -294,15 +294,12 @@ walk(target, (path, entry) => {
 // standard is never itself subject to substitution. The header names the jig
 // commit, not the day, so re-stamping from the same jig changes nothing.
 const jigGit = (...gitArgs) => {
-  // GIT_* is exported to hooks (GIT_DIR in a worktree) and would answer for
-  // another repo.
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
-  )
+  // A calling git hook exports GIT_DIR (and more in a worktree), which would
+  // answer for another repo.
   try {
     return execSync(`git ${gitArgs.join(' ')}`, {
       cwd: jigRoot,
-      env,
+      env: withoutRepoGitEnv(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()

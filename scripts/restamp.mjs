@@ -29,6 +29,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withoutRepoGitEnv } from './git-env.mjs'
 import { MIGRATIONS, classify, ownedDirectories } from './restamp-rules.mjs'
 
 const generator = join(
@@ -121,7 +122,7 @@ const cleanUp = () => scratch && rmSync(scratch, { recursive: true, force: true 
       ...optional('--board-scope', sessionConfig?.board?.scope),
       ...optional('--backlog', sessionConfig?.backlog?.dataSource),
     ],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', env: withoutRepoGitEnv() },
   )
   if (stamped.status !== 0) {
     cleanUp()
@@ -140,12 +141,10 @@ const filesUnder = (root, dir = '') => {
 const text = (root, path) => readFileSync(join(root, path), 'utf8')
 const here = (path) => existsSync(join(target, path))
 
-// GIT_* is exported to hooks and would point git at another repo.
-const gitEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
-)
+// A calling git hook exports GIT_DIR (and more in a worktree), which would
+// point git at the hook's repo instead of the project.
 const git = (gitArgs, cwd) =>
-  spawnSync('git', gitArgs, { cwd, env: gitEnv, encoding: 'utf8' })
+  spawnSync('git', gitArgs, { cwd, env: withoutRepoGitEnv(), encoding: 'utf8' })
 
 const writes = [] // { path, action: 'create' | 'update' | 'remove' | 'migrate', content?, note? }
 const shared = [] // { path, lines: [] }
