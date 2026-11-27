@@ -13,6 +13,8 @@ Hard-won knowledge a contributor to the jig needs, by topic: symptom â†’ cause â
 ## Template layout
 
 - **Dotfiles are stored with a `_` prefix** (`_gitignore`, `_github/`, `_claude/`) and renamed by the generator. A real `.gitignore` inside `template/` would apply to the jig itself. `_TEMPLATE.md` is the one rename exception.
+- **Every template file has an owner in `scripts/restamp-rules.mjs`** (jig-owned, shared or project-owned). A test stamps each composition and fails on a file that matches no pattern or two; a new template file means a new entry there.
+- **A file the generator writes into a stamp must already be Prettier-clean**, since the stamp's gate runs `format:check`. `.jig.json` is written by hand-rolled code for that reason: `JSON.stringify` breaks a short array over several lines and Prettier wants it on one.
 - **A layer never ships a whole `lefthook.yml`.** It would silently replace the toolchain's hooks (Bun and Swift repos once got pnpm hooks from `public`). Layers add fragments under `.lefthook/`; every root `lefthook.yml` has `extends: [.lefthook/*.yml]`, which lefthook accepts when the glob matches nothing.
 - **Key generator behaviour on the selected layers, not on directories.** The CI-variant picker once keyed on `.github/workflows` existing, and broke when `public` started shipping `release.yml` there.
 - **When picking one of several variant files, delete the losers before renaming the winner.** Renaming first got the winner deleted as a stale variant.

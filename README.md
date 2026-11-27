@@ -17,7 +17,22 @@ Compose order: `base` → flavors → layers (later files win). The stamp ends w
 - **Flavors** — `www-next` (static-first marketing site), `api-hono` (+ Zod contracts and db seed packages; with `web-vite`, deploys as one Vercel project via a root `vercel.json`), `web-vite` (product web app), `tui-bun` (Bun toolchain swap for compiled-binary CLIs/TUIs), `desktop-tauri` (Rust standards delta; scaffold the app from upstream), `desktop-swift` (native Apple app: pure SwiftPM packages + XcodeGen-described SwiftUI app, Swift Testing, swift-format).
 - **Layers** — `ci` (GitHub Actions running the same verify gate as the pre-push hook), `public` (LICENSE, CONTRIBUTING, issue templates, gitleaks as a lefthook fragment, tag-triggered release fan-out to generated satellite repos). `ci` does not apply to `desktop-swift`.
 - Flags: `--title` (human-facing name for headings and page titles; defaults to the kebab name in Title Case), `--dir`, `--author`, `--bundle-id` (Swift apps), `--board-scope` and `--backlog` (see Sessions), `--no-git`, `--verify` (install + run the gate immediately).
-- Every stamp vendors the standard as `docs/STANDARDS.md` and ships an `.envrc.example` with the Infisical + direnv recipe.
+- Every stamp vendors the standard as `docs/STANDARDS.md`, records the jig commit and its composition in `.jig.json`, and ships an `.envrc.example` with the Infisical + direnv recipe.
+
+## Re-stamping
+
+A stamped project is brought to the latest jig by re-running the stamp over it, from a jig checkout:
+
+```sh
+node scripts/restamp.mjs ../my-thing            # dry run: report only
+node scripts/restamp.mjs ../my-thing --apply    # write what the jig owns
+```
+
+- **Jig-owned files are replaced whole**: `docs/STANDARDS.md`, `scripts/session.mjs`, the two session commands, and the rest of the owned list.
+- **Shared files are never written**: root `package.json`, `lefthook.yml`, `tsconfig.base.json`, the ESLint, Prettier and commitlint configs, `.gitignore`, workflows. The report shows how each differs from today's jig, for a person or an agent to merge.
+- **Project files are never touched**: `AGENTS.md`, `DEVIATIONS.md`, `docs/DECISIONS.md`, `session.config.json`, everything under `apps/` and `packages/`. The one exception is a listed migration, a change the new jig-owned scripts need (today: `board.profile` leaves `session.config.json`).
+
+Who owns what is one list, `scripts/restamp-rules.mjs`. Every stamp records the jig commit and its flavors and layers in a committed `.jig.json`; a re-stamp reads the composition from it and updates it. A repo stamped before the record existed names its composition once: `--flavors www-next,api-hono --layers ci`. Flags: `--reference <dir>` keeps the fresh stamp the repo was compared against, to copy from; `--force` overwrites uncommitted changes to jig-owned files; `--name`, `--title` and `--bundle-id` when they can't be read back from the repo. After `--apply`: merge the shared files, run the project's `verify`, commit.
 
 ## Sessions
 
@@ -53,7 +68,7 @@ pnpm verify      # + stamp, install and verify the pnpm, Bun and Swift compositi
 
 - `AGENTS.md` — the canonical coding standards and agent operating rules (self-contained; projects inherit it).
 - `template/` — the files stamped into new projects: a shared base, stack flavors, and optional layers.
-- `scripts/` — the generator that does the stamping, its tests, and the smoke-stamp runner.
+- `scripts/` — the generator that does the stamping, the re-stamp that brings a project to a later jig, their tests, and the smoke-stamp runner.
 - `docs/DECISIONS.md` and `docs/LEARNINGS.md` — this repo's own decisions, and the learnings a contributor needs. Its backlog and learnings live where every project's do. The jig follows its own rules, and reaches the template's session commands and script by symlink (`.claude/skills`, `scripts/session.mjs`) so it runs exactly what it stamps.
 
 ## Philosophy

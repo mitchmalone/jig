@@ -8,6 +8,7 @@
 //     [--board-scope team] [--backlog notion-data-source-id]
 //
 // Compose order: base → flavors → layers (later files overwrite earlier).
+// Bringing an existing project to a later jig is scripts/restamp.mjs.
 // Zero dependencies; bare Node.
 import { execSync } from 'node:child_process'
 import {
@@ -16,6 +17,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -289,12 +291,71 @@ walk(target, (path, entry) => {
 
 // 6. Every stamp vendors the standard — the jig is a stamp, not a runtime
 // dependency; the in-repo copy governs from here on. Written last so the
-// standard is never itself subject to substitution.
+// standard is never itself subject to substitution. The header names the jig
+// commit, not the day, so re-stamping from the same jig changes nothing.
+const jigGit = (...gitArgs) => {
+  // GIT_* is exported to hooks (GIT_DIR in a worktree) and would answer for
+  // another repo.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+  )
+  try {
+    return execSync(`git ${gitArgs.join(' ')}`, {
+      cwd: jigRoot,
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return null
+  }
+}
+// A jig that is not a git checkout (a tarball, a copy) has no commit to name.
+const isJigCheckout = jigGit('rev-parse', '--show-toplevel') !== null &&
+  resolve(jigGit('rev-parse', '--show-toplevel')) === realpathSync(jigRoot)
+const jigVersion = {
+  commit: isJigCheckout ? jigGit('rev-parse', 'HEAD') : null,
+  date:
+    (isJigCheckout && jigGit('log', '-1', '--format=%cI')) ||
+    new Date().toISOString().slice(0, 10),
+}
 {
   const standard = readFileSync(join(jigRoot, 'AGENTS.md'), 'utf8')
-  const stamp = `<!-- vendored from the jig on ${new Date().toISOString().slice(0, 10)} -->\n\n`
+  const version = jigVersion.commit
+    ? `at ${jigVersion.commit.slice(0, 12)} (${jigVersion.date.slice(0, 10)})`
+    : `on ${jigVersion.date}`
+  const stamp = `<!-- vendored from the jig ${version} -->\n\n`
   mkdirSync(join(target, 'docs'), { recursive: true })
   writeFileSync(join(target, 'docs', 'STANDARDS.md'), stamp + standard)
+}
+
+// 6b. The stamp record: which jig this repo was stamped from and what it was
+// composed of, so `scripts/restamp.mjs` can bring it to a later jig. Committed
+// with the project. Written the way Prettier formats JSON (a list on one line
+// when it fits in 80 columns), because the stamp's own gate checks formatting.
+{
+  const list = (key, values, last) => {
+    const inline = `  "${key}": [${values.map((v) => JSON.stringify(v)).join(', ')}]${last ? '' : ','}`
+    if (inline.length <= 80) return inline
+    const lines = values.map((v) => `    ${JSON.stringify(v)}`).join(',\n')
+    return `  "${key}": [\n${lines}\n  ]${last ? '' : ','}`
+  }
+  const record = [
+    '{',
+    '  "jig": {',
+    `    "commit": ${JSON.stringify(jigVersion.commit)},`,
+    `    "date": ${JSON.stringify(jigVersion.date)}`,
+    '  },',
+    `  "name": ${JSON.stringify(args.name)},`,
+    `  "title": ${JSON.stringify(title)},`,
+    ...(toolchain === 'swift'
+      ? [`  "bundleId": ${JSON.stringify(bundleId)},`]
+      : []),
+    list('flavors', args.flavors, false),
+    list('layers', args.layers, true),
+    '}',
+  ]
+  writeFileSync(join(target, '.jig.json'), `${record.join('\n')}\n`)
 }
 
 // --- git + verify ----------------------------------------------------------
