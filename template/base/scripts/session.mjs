@@ -51,8 +51,9 @@ const STATUSES = [
   'Triage',
   'Done',
 ]
-// The backlog's Owner is a rollup of Project → Droid: a droid owns a project,
-// so every item's owner is its project's droid. Notion accepts a write to a
+// The backlog's Owner is a rollup of Project → Droid: every item's owner is
+// its project's droid, or empty when the project has none (a droid may own
+// several projects). Notion accepts a write to a
 // rollup and silently drops it, so the script never writes Owner.
 const OWNER_IS_READ_ONLY =
   "Owner is the project's droid, a read-only rollup of Project → Droid: leave --owner out. For work only a person can do, raise it with `--status Blocked` and the blocker kind and reason in `--file`."
@@ -385,7 +386,7 @@ const notionIds = (relation) =>
 
 // The droid page ids an Owner rollup of Project → Droid shows. Anything else
 // (no Owner, an empty rollup, an older select Owner) has none. Notion cuts a
-// page's relations off at 25; one droid per project keeps far below that.
+// page's relations off at 25; at most one droid per project keeps far below that.
 const droidIds = (owner) =>
   (owner?.rollup?.array ?? []).flatMap((entry) => notionIds(entry?.relation))
 
@@ -414,8 +415,8 @@ const select = (name) => ({ select: { name } })
 const postedId = (answer) =>
   JSON.stringify(answer).match(/msg_[A-Za-z0-9_-]+/)?.[0] ?? ''
 
-// Repo = project = droid: whoever runs a session here works this project's
-// items, so any Ready item may start. In Progress is the lock.
+// Whoever runs a session here works this project's items, whatever droid the
+// project has, or none, so any Ready item may start. In Progress is the lock.
 const isStartable = (item) => item.status === 'Ready'
 
 const firstLine = (text) => text.split('\n')[0].trim()
