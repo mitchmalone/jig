@@ -1,8 +1,7 @@
 {
   "board": {
     "scope": "{{BOARD_SCOPE}}",
-    "channel": "{{PROJECT_NAME}}",
-    "profile": "claude"
+    "channel": "{{PROJECT_NAME}}"
   },
   "backlog": {
     "dataSource": "{{BACKLOG_DATA_SOURCE}}",

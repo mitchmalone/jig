@@ -14,7 +14,10 @@
 //   node scripts/session.mjs close --file handoff.md --state <state> [--pr N] [--blocked kind]
 //   node scripts/session.mjs discard [--force]
 //
-// Settings come from session.config.json at the repo root. Zero dependencies.
+// Settings come from session.config.json at the repo root. The agent running
+// the session names itself in JIG_AGENT (beebee, artoo, claude, ...): every
+// Board post is written as that profile, and nothing runs without it.
+// Zero dependencies.
 // Exit codes: 0 ok, 1 failed, 2 an earlier session was never closed.
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -516,9 +519,38 @@ function loadConfig(root) {
     fail(
       `session.config.json is missing ${missing.map(([key]) => key).join(', ')}`,
     )
-  config.board.profile ??= 'claude'
+  if (config.board.profile !== undefined)
+    fail(
+      'session.config.json sets board.profile, which is gone: Board posts are written as the agent running the session, from JIG_AGENT. Delete board.profile',
+    )
   return config
 }
+
+// The agent running this session, from its own environment. A name, never a
+// default: a session that does not say who it is would post as someone else.
+const AGENT_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
+function loadAgent(env) {
+  const agent = env.JIG_AGENT
+  if (!agent)
+    fail(
+      'JIG_AGENT is not set: set it to your agent name (beebee, artoo, claude, ...) in your own environment, then rerun. Board posts are written as that profile. Nothing was fetched or written',
+    )
+  if (agent.length > 32 || !AGENT_NAME.test(agent))
+    fail(
+      `JIG_AGENT ${JSON.stringify(agent.slice(0, 40))} is not an agent name: lowercase letters and digits, single hyphens between them, starting with a letter, at most 32 long`,
+    )
+  return agent
+}
+
+// Commands that need to know who is running: the ones that post (learn,
+// close) and the pull that starts a session, so a missing name shows up
+// before the work rather than at the handoff. A pull that finds an unclosed
+// session only reports it, and the Notion-only commands that recovery
+// needs (set, start, raise) run without it.
+const needsAgent = (command, dir) =>
+  command === 'learn' ||
+  command === 'close' ||
+  (command === 'pull' && !(existsSync(dir) && readdirSync(dir).length > 0))
 
 // The session record, or undefined when there is no usable one.
 function loadState(dir) {
@@ -673,6 +705,7 @@ function pull({ dir, config, stores, now, log }) {
       `The board has no "${config.board.channel}" channel yet: a new project, or a wrong name in session.config.json.`,
     )
   else log(handoff ? `Last handoff: ${handoff.createdAt}.` : 'No handoff yet.')
+  log(`Board posts go out as ${config.board.profile} (JIG_AGENT).`)
   return 0
 }
 
@@ -888,6 +921,7 @@ export function main(
     run = defaultRun,
     now = () => new Date(),
     log = console.log,
+    env = process.env,
   } = {},
 ) {
   const [command, ...rest] = argv
@@ -898,6 +932,7 @@ export function main(
   if (command === 'discard')
     return discard({ root, dir, run, log }, positional, flags)
   const config = loadConfig(root)
+  if (needsAgent(command, dir)) config.board.profile = loadAgent(env)
   const context = {
     root,
     dir,

@@ -35,6 +35,7 @@ Once per machine:
 | Vercel CLI ≥ 66.2    | `pnpm add -g vercel@latest`, then `vercel login`. Older CLIs have no `board`    |
 | Notion CLI           | `curl -fsSL https://ntn.dev \| bash`, then `ntn login`                           |
 | The `board` skill    | `npx skills add vercel/board --skill board -g -a claude-code -y`                |
+| `JIG_AGENT`          | Your agent's name (`claude`, `beebee`) in its env. Board posts are written as it |
 
 The stamp defaults point at the jig owner's Vercel team and Notion data source. Stamping for yourself: pass `--board-scope <team>` and `--backlog <data-source-id>`, with a database that has `Name`, `Status`, `Owner`, `Project` and `PR Link` properties as the standard describes. `Project` is a relation to a database of projects (a plain select also works); the project's entry there must exist before the first `/session-start`, named as in `session.config.json`. `Owner` is a read-only rollup of `Project` → the projects database's `Droid` relation (a database of droids with a `Name` title, one droid per project); the script only reads it, to show the project's droid in `pull`, and never writes it. A backlog without that rollup still works: the droid shows as "no droid". The Board is experimental and anyone on the team can read a channel, so nothing secret goes on it.
 
