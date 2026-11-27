@@ -23,6 +23,7 @@ import {
 } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withoutRepoGitEnv } from './git-env.mjs'
 import { xcodeStatus } from './xcode-status.mjs'
 
 const jigRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -112,7 +113,10 @@ const author =
   args.author ??
   (() => {
     try {
-      return execSync('git config user.name', { encoding: 'utf8' }).trim()
+      return execSync('git config user.name', {
+        encoding: 'utf8',
+        env: withoutRepoGitEnv(),
+      }).trim()
     } catch {
       return 'the author'
     }
@@ -295,7 +299,9 @@ walk(target, (path, entry) => {
 
 // --- git + verify ----------------------------------------------------------
 
-const run = (cmd) => execSync(cmd, { cwd: target, stdio: 'inherit' })
+// Run in the stamp's own repo, never the one a calling git hook points at.
+const run = (cmd) =>
+  execSync(cmd, { cwd: target, stdio: 'inherit', env: withoutRepoGitEnv() })
 
 // 7. Swift import order depends on the project name (`<Name>Core` sorts
 // either side of `SwiftUI`), so the stamp is formatted, not hand-sorted.
