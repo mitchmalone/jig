@@ -1,35 +1,28 @@
 {
-  "name": "smoke-bun",
+  "name": "smoke-swift",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@12.18.0",
   "engines": {
-    "bun": ">=1.4"
+    "node": ">=24"
   },
   "scripts": {
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
-    "dev": "bun run --filter '@smoke-bun/cli' dev",
-    "build": "bun run --filter '*' build",
-    "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun test",
-    "lint": "bunx eslint . --max-warnings 0",
-    "format": "bunx prettier --write .",
-    "format:check": "bunx prettier --check .",
-    "verify": "bun run typecheck && bun run lint && bun run format:check && bun test"
+    "generate": "node scripts/xcode.mjs generate",
+    "build": "node scripts/xcode.mjs build",
+    "start": "node scripts/xcode.mjs run",
+    "xcode": "node scripts/xcode.mjs open",
+    "test": "for p in packages/*/; do swift test --package-path \"$p\" || exit 1; done",
+    "lint": "xcrun swift-format lint --strict --recursive apps packages",
+    "format": "xcrun swift-format format -i --recursive apps packages && prettier --write .",
+    "format:check": "xcrun swift-format lint --strict --recursive apps packages && prettier --check .",
+    "verify": "pnpm format:check && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
-    "@eslint/js": "^10.0.1",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
-    "@types/bun": "^1.4.4",
-    "eslint": "^10.14.0",
     "lefthook": "^2.2.2",
-    "prettier": "^3.10.1",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.2"
+    "prettier": "^3.10.1"
   }
 }

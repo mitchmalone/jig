@@ -1,0 +1,3 @@
+# No JS workspaces here — pnpm is only the gate runner. Build scripts are opt-in.
+allowBuilds:
+  lefthook: true

@@ -1,8 +1,8 @@
-# AGENTS.md — Smoke Bun
+# AGENTS.md — Smoke Swift
 
 <!-- One line: what this product is and who it's for. -->
 
-Smoke Bun is …
+Smoke Swift is …
 
 ## Standard
 
@@ -12,8 +12,8 @@ This project was stamped from the [jig](https://github.com/mitchmalone/jig). Its
 
 Working state lives outside the repo — see the standard for roles and discipline. Start every session with `/session-start` and end it with `/session-end`; both drive `scripts/session.mjs`, and `session.config.json` holds the pointers below.
 
-- **Backlog:** Notion, The Backlog, `Project` = `Smoke Bun`.
-- **Handoffs and learnings:** Vercel Board, team `ramenamok`, channel `smoke-bun`.
+- **Backlog:** Notion, The Backlog, `Project` = `Smoke Swift`.
+- **Handoffs and learnings:** Vercel Board, team `ramenamok`, channel `smoke-swift`.
 - **Decisions:** `docs/DECISIONS.md`, in the commit that makes them.
 - **This session's copy:** `local/session/` (gitignored).
 
@@ -49,14 +49,14 @@ placeholders remain. -->
 
 ## Commands
 
-- `bun run verify` — the gate. The pre-push hook and CI run exactly this.
+- `pnpm verify` — the gate. The pre-push hook and CI run exactly this.
 - Everything else is a script in the root `package.json`.
 
 <!-- Record project-unique local ports here (the standard requires them). -->
 
 ## Definition of done
 
-- `bun run verify` green.
+- `pnpm verify` green.
 - New behavior has tests, written first (red/green/refactor).
 - Decisions recorded in `docs/DECISIONS.md` in the same commit.
 - The backlog item is `In Review` with its PR link; `/session-end` closes the session out.
