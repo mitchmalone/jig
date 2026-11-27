@@ -7,19 +7,19 @@ pre-commit:
   commands:
     lint:
       glob: '*.{ts,tsx,js,mjs}'
-      run: pnpm eslint --fix {staged_files}
+      run: bunx eslint --fix {staged_files}
       stage_fixed: true
     format:
       glob: '*.{ts,tsx,js,mjs,json,md,css,yml,yaml}'
-      run: pnpm prettier --write {staged_files}
+      run: bunx prettier --write {staged_files}
       stage_fixed: true
 
 commit-msg:
   commands:
     commitlint:
-      run: pnpm commitlint --edit {1}
+      run: bunx commitlint --edit {1}
 
 pre-push:
   commands:
     verify:
-      run: pnpm verify
+      run: bun run verify

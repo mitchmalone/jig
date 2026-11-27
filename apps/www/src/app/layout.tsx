@@ -4,8 +4,8 @@ import type { ReactNode } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Smoke Pnpm',
-  description: 'Smoke Pnpm',
+  title: 'Smoke Bun',
+  description: 'Smoke Bun',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

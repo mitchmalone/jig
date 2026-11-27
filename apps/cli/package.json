@@ -1,0 +1,13 @@
+{
+  "name": "@smoke-bun/cli",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "smoke-bun": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build --compile --outfile dist/smoke-bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

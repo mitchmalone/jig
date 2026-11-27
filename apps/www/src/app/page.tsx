@@ -1,4 +1,4 @@
-const title = 'Smoke Pnpm'
+const title = 'Smoke Bun'
 
 export default function Home() {
   return (
