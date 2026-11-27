@@ -190,6 +190,67 @@ describe('deploy topology', () => {
     assert.match(www.ignoreCommand, /:\/apps\/www/)
   })
 
+  // Vercel skips the build when the ignore step exits 0. Comparing against
+  // HEAD^ cancelled a first deployment whose commit did not touch the app,
+  // and missed changes in a push of several commits; the last deployed
+  // commit is $VERCEL_GIT_PREVIOUS_SHA.
+  it('builds unless nothing the app depends on changed since the last deployment', () => {
+    const dir = stampOk('my-thing', PNPM)
+    const app = JSON.parse(read(dir, 'vercel.json'))
+    const www = JSON.parse(read(dir, 'apps/www/vercel.json'))
+    const steps = {
+      web: [app.services.web.ignoreCommand, 'apps/web/x'],
+      api: [app.services.api.ignoreCommand, 'apps/api/x'],
+      www: [www.ignoreCommand, 'apps/www/x'],
+    }
+    const env = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+      ),
+      GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@jig.invalid',
+      GIT_COMMITTER_NAME: 't',
+      GIT_COMMITTER_EMAIL: 't@jig.invalid',
+    }
+    const repo = join(scratch, `ignore-${counter++}`)
+    mkdirSync(join(repo, 'apps/www'), { recursive: true })
+    const git = (...args) =>
+      spawnSync('git', args, { cwd: repo, encoding: 'utf8', env }).stdout.trim()
+    const commit = (path) => {
+      mkdirSync(dirname(join(repo, path)), { recursive: true })
+      writeFileSync(join(repo, path), `${counter++}`)
+      git('add', '-A')
+      git('commit', '-q', '--no-verify', '-m', path)
+      return git('rev-parse', 'HEAD')
+    }
+    git('init', '-q', '-b', 'main')
+    const run = (command, cwd, previous) =>
+      spawnSync('sh', ['-c', command], {
+        cwd,
+        env:
+          previous === undefined
+            ? env
+            : { ...env, VERCEL_GIT_PREVIOUS_SHA: previous },
+      }).status
+    const builds = (name, previous) => {
+      const [command] = steps[name]
+      const cwd = join(repo, name === 'www' ? 'apps/www' : '')
+      return run(command, cwd, previous) !== 0
+    }
+
+    for (const [name, [, file]] of Object.entries(steps)) {
+      const base = commit('README.md')
+      commit(file)
+      commit('README.md')
+      assert.equal(builds(name), true, `${name}: no previous deployment`)
+      assert.equal(builds(name, base), true, `${name}: changed two commits back`)
+      assert.equal(builds(name, 'f'.repeat(40)), true, `${name}: unknown commit`)
+      const last = git('rev-parse', 'HEAD')
+      commit('README.md')
+      assert.equal(builds(name, last), false, `${name}: nothing it uses changed`)
+    }
+  })
+
   it('leaves the deploy wiring out of an API-only stamp', () => {
     const dir = stampOk('my-thing', ['--flavors', 'api-hono'])
     assert.equal(existsSync(join(dir, 'vercel.json')), false)
