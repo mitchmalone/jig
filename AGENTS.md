@@ -4,7 +4,7 @@ The canonical standard for projects built on the jig. Self-contained: everything
 
 ## Layering
 
-**The jig is a stamp, not a runtime dependency.** At stamp time this file is copied into the project as `docs/STANDARDS.md`; from then on the in-repo copy is the operative standard for that repo. Nothing outside the repo is consulted — jig updates reach a project only through deliberate reconciliation, never ambiently.
+**The jig is a stamp, not a runtime dependency.** At stamp time this file is copied into the project as `docs/STANDARDS.md`; from then on the in-repo copy is the operative standard for that repo. Nothing outside the repo is consulted — jig updates reach a project only through deliberate reconciliation, never ambiently. Reconciliation is a re-stamp: the jig's `scripts/restamp.mjs`, run over the project, replaces the files the jig owns, reports how the shared ones differ, and never touches the project's own. `.jig.json` (committed) records the jig commit and the flavors and layers the repo was last stamped from.
 
 Rules resolve in three tiers inside the repo, most specific wins:
 

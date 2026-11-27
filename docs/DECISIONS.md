@@ -2,6 +2,32 @@
 
 Append-only, newest first. Decision, context, reasoning. Decided once — don't relitigate.
 
+## 2026-11-27 — Reconciliation is a re-stamp: `scripts/restamp.mjs`, file ownership in one list, the stamp recorded in `.jig.json`
+
+A project is brought to the latest jig by running `node scripts/restamp.mjs <project-dir>` from a jig checkout, not by hand. It stamps the project's composition afresh into a scratch directory with the real generator and compares the result with the repo, file by file, by owner. Ownership is one list, `scripts/restamp-rules.mjs`:
+
+- **Jig-owned**, replaced whole: `.jig.json`, `CLAUDE.md`, `docs/STANDARDS.md`, `docs/SWIFT.md`, `docs/RUST.md`, `scripts/session.mjs`, `scripts/xcode.mjs`, `.claude/skills/session-start/`, `.claude/skills/session-end/`, `.lefthook/gitleaks.yml`, `local/README.md`. An owned directory loses files the jig no longer ships.
+- **Shared**, never written, differences reported: root `package.json`, `pnpm-workspace.yaml`, `lefthook.yml`, `tsconfig.base.json`, `eslint.config.js`, `commitlint.config.js`, `.gitignore`, `.prettierrc`, `.prettierignore`, `.envrc.example`, `.bun-version`, `.swift-format`, `Brewfile`, `rust-toolchain.toml`, root `vercel.json`, `apps/www/vercel.json` (carved out of `apps/` so a fix to its ignore step is reported), `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `docs/releases/_TEMPLATE.md`.
+- **Project-owned**, never touched: `AGENTS.md`, `DEVIATIONS.md`, `LICENSE`, `docs/DECISIONS.md`, `docs/LEARNINGS.md`, `session.config.json`, `apps/`, `packages/`.
+
+The default is a dry run that prints the report; `--apply` writes the jig-owned files and nothing else. `--apply` writes only what git can give back: it refuses, unless `--force`, a target that is not a git work tree, an uncommitted, deleted or gitignored file among those it would write or remove, and a symlink at a jig-owned path (writing through it would change a project file). A record stamped from a jig with uncommitted changes to what it stamps carries `"dirty": true`. `--reference <dir>` keeps the fresh stamp for merging from.
+
+Every stamp writes `.jig.json`, committed: the jig commit SHA and its commit date, the project name and title, the bundle id of a Swift app, and the flavors and layers. A re-stamp reads the composition from it and rewrites it. A repo stamped before the record existed is re-stamped by naming `--flavors` (and `--layers`); the name and title are read from `package.json` and `session.config.json`. The header of `docs/STANDARDS.md` now names the jig commit instead of the day, so a re-stamp from the same jig changes nothing.
+
+**Migrations are the one exception to "project files are never touched".** When the jig's own script stops accepting something a project file holds, the re-stamp that brings the new script makes that one change and leaves the rest of the file alone. They are listed in `scripts/restamp-rules.mjs` beside the ownership lists. The first: `board.profile` is removed from `session.config.json`, because the session script that the same re-stamp installs refuses a config that sets it.
+
+Context: Wriker and every other stamped project fell behind the jig with each session-script change (the 2026-11-21, 11-26 and 11-27 decisions each end "until they are reconciled"), and reconciling by hand does not happen.
+
+Reasoning:
+
+- **A sibling script, not a `--restamp` flag.** The generator refuses a non-empty directory and writes everything; a re-stamp writes almost nothing and mostly reports. Two commands with opposite defaults read better as two scripts. The re-stamp runs the generator as a child, so there is one composition path and no second copy of the layering rules.
+- **Compare against a fresh stamp, not against the template.** Flavors overwrite base files, toolchains drop files, placeholders are substituted. Only a real stamp knows what the project's composition looks like today.
+- **`.jig.json`, not a block in `session.config.json`.** The session config is the project's and a re-stamp must not rewrite it; the record is the jig's and is rewritten every time. Different owners, different files. As a jig-owned file the record needs no special case: the reference stamp carries the new one.
+- **Shared files are reported, not merged.** A three-way merge needs the old jig's version of the file, which older stamps cannot name, and a wrong automatic merge of `package.json` or a workflow is worse than a clear list. `package.json` and the ignore files report only what the jig has and the project lacks or changed; what a project added is its own business. Everything else is a unified diff from the repo to the jig.
+- **Every template file must be classified.** A test stamps each composition and fails on a file matching no pattern or two, so a new template file cannot silently become anyone's.
+
+Costs accepted: re-stamping a Swift repo needs a Mac, because the generator formats a Swift stamp; a project that hand-edited a jig-owned file loses the edit (that is the rule, and the uncommitted-changes guard plus git history cover the accident). Deferred: three-way merge of shared files from the recorded commit (trigger: merging the reports by hand becomes the slow part); a `--check` exit code for CI drift detection (trigger: a project wants to fail its gate when behind).
+
 ## 2026-11-27 — Not every project has a droid; one droid may own several projects
 
 This amends the 2026-11-26 droid decision. A project has at most one droid, may have none, and one droid may own several projects. Owner stays a read-only rollup of Project → Droid: an item's owner is its project's droid, or empty when the project has none, and nothing writes it. "Repo = project = droid" and "one droid per project" are dropped from the standard, the README and the stamped skills; the repo is still the project, but the droid is not the same unit. `scripts/session.mjs` needs no behaviour change: it already treats a project without a droid as startable and shows "no droid", and a shared droid is just the same page id in more than one project's rollup. Only its comments change. Context: Mitch, 2026-11-27. Reasoning: droids are fewer than projects, and some projects are worked only by whoever runs the session; the rollup already says which droid, if any, owns a project, so nothing in the script depended on the one-to-one rule.

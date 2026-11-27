@@ -3,13 +3,13 @@
   "services": {
     "web": {
       "root": "apps/web",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':/apps/web' ':/packages' ':/{{LOCKFILE}}' ':/vercel.json'",
+      "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- ':/apps/web' ':/packages' ':/{{LOCKFILE}}' ':/vercel.json' || exit 1",
       "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
     },
     "api": {
       "root": "apps/api",
       "entrypoint": "src/index.ts",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':/apps/api' ':/packages' ':/{{LOCKFILE}}' ':/vercel.json'"
+      "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- ':/apps/api' ':/packages' ':/{{LOCKFILE}}' ':/vercel.json' || exit 1"
     }
   },
   "rewrites": [
