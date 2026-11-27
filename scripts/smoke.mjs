@@ -22,6 +22,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withoutRepoGitEnv } from './git-env.mjs'
 import { xcodeStatus } from './xcode-status.mjs'
 
 const generator = join(
@@ -48,7 +49,7 @@ function vercelBuild(dir, settings, expected) {
     spawnSync('sh', ['-c', VERCEL], {
       cwd: dir,
       stdio: 'inherit',
-      env: { ...process.env, VERCEL_TELEMETRY_DISABLED: '1' },
+      env: { ...withoutRepoGitEnv(), VERCEL_TELEMETRY_DISABLED: '1' },
     }).status === 0
   const missing = expected.filter(
     (path) => !existsSync(join(dir, '.vercel', 'output', path)),
@@ -114,19 +115,23 @@ const selected = Object.keys(compositions).filter(
     requested.length === 0 || requested.includes(name) || isRequired(name),
 )
 
+// Every stamp gets its own repo: run from a git hook (pre-push → pnpm
+// verify), the inherited GIT_DIR would point it at the jig's (git-env.mjs).
+const baseEnv = withoutRepoGitEnv()
+
 // The stamp makes an initial commit; CI runners have no git identity. These
 // only fill the gap — a configured identity or existing env still wins.
 const hasGitIdentity =
-  spawnSync('git', ['config', 'user.name']).status === 0 &&
-  spawnSync('git', ['config', 'user.email']).status === 0
+  spawnSync('git', ['config', 'user.name'], { env: baseEnv }).status === 0 &&
+  spawnSync('git', ['config', 'user.email'], { env: baseEnv }).status === 0
 const env = hasGitIdentity
-  ? process.env
+  ? baseEnv
   : {
       GIT_AUTHOR_NAME: 'jig smoke',
       GIT_AUTHOR_EMAIL: 'smoke@jig.invalid',
       GIT_COMMITTER_NAME: 'jig smoke',
       GIT_COMMITTER_EMAIL: 'smoke@jig.invalid',
-      ...process.env,
+      ...baseEnv,
     }
 
 const scratch = mkdtempSync(join(tmpdir(), 'jig-smoke-'))

@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  mkdirSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -337,5 +338,72 @@ describe('parseXcodeProbe', () => {
       error: { code: 'ETIMEDOUT', message: 'spawnSync xcodebuild ETIMEDOUT' },
     })
     assert.match(timedOut.reason, /ETIMEDOUT/)
+  })
+})
+
+describe('git environment', () => {
+  // A git hook (lefthook pre-push → pnpm verify) exports GIT_DIR, and in a
+  // linked worktree GIT_WORK_TREE and GIT_INDEX_FILE too. A stamp that
+  // inherited them ran `git init` and its commit against the hook's repo.
+  it('stamps its own repo and leaves the repo a hook points at untouched', () => {
+    const base = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+    )
+    const identity = {
+      GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@jig.invalid',
+      GIT_COMMITTER_NAME: 't',
+      GIT_COMMITTER_EMAIL: 't@jig.invalid',
+    }
+    const sentinel = join(scratch, `sentinel-${counter++}`)
+    mkdirSync(sentinel)
+    const git = (args, cwd = sentinel) =>
+      spawnSync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        env: { ...base, ...identity },
+      })
+    git(['init', '-q', '-b', 'main'])
+    git(['commit', '-q', '--allow-empty', '--no-verify', '-m', 'sentinel'])
+    const head = git(['rev-parse', 'HEAD']).stdout.trim()
+    const config = readFileSync(join(sentinel, '.git', 'config'), 'utf8')
+
+    const dir = join(scratch, `stamp-${counter++}`)
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(jigRoot, 'scripts', 'new-project.mjs'),
+        '--name',
+        'hooked',
+        '--dir',
+        dir,
+        ...PNPM,
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...base,
+          ...identity,
+          GIT_DIR: join(sentinel, '.git'),
+          GIT_WORK_TREE: sentinel,
+          GIT_INDEX_FILE: join(sentinel, '.git', 'index'),
+          GIT_PREFIX: '',
+          GIT_OBJECT_DIRECTORY: join(sentinel, '.git', 'objects'),
+          GIT_COMMON_DIR: join(sentinel, '.git'),
+        },
+      },
+    )
+    assert.equal(result.status, 0, result.stderr)
+
+    assert.equal(git(['rev-parse', 'HEAD']).stdout.trim(), head)
+    assert.equal(git(['log', '--oneline']).stdout.trim().split('\n').length, 1)
+    assert.equal(readFileSync(join(sentinel, '.git', 'config'), 'utf8'), config)
+    assert.equal(git(['status', '--porcelain']).stdout, '')
+
+    assert.ok(existsSync(join(dir, '.git')), 'the stamp has its own repo')
+    assert.match(
+      git(['log', '--oneline'], dir).stdout,
+      /chore: stamp project from the jig/,
+    )
   })
 })
