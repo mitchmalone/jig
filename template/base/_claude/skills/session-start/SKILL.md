@@ -41,7 +41,7 @@ Tell the user, briefly:
 
 - **Last state:** what the last handoff says landed and what it left half-done.
 - **In flight:** items that are `In Progress` or `In Review`. An `In Progress` item is held by whoever started it. This session holds none yet, so each one belongs to another session or to one that died: say so and ask, never assume.
-- **Waiting on the user:** anything `Blocked`, `In Review`, or in `Triage` (planning). The backlog's Owner is the project's droid, a read-only rollup, so status says whose turn it is, not Owner.
+- **Waiting on the user:** anything `Blocked`, `In Review`, or in `Triage` (planning). The backlog's Owner is the project's droid (if it has one), a read-only rollup, so status says whose turn it is, not Owner.
 - **Recommendation:** one item marked `[startable]`, or a set that is safe to run in parallel, with the reason and a short breakdown of the work.
 
 There is no priority field. Choose from what the handoff names as next, what unblocks other items, and what is small enough to finish. If nothing is startable, propose candidates from `Todo` or `Scheduled`.
@@ -52,7 +52,7 @@ When the owner of the backlog agrees you take a named item, as the standard defi
 node scripts/session.mjs set <item-id> --status Ready
 ```
 
-Owner is never written: it is the project's droid, a read-only rollup of Project → Droid, and `--owner` is refused. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's `In Progress` item, and `set <id> --status <status> --force` releases one.
+Owner is never written: it is the project's droid, or empty when the project has none, a read-only rollup of Project → Droid, and `--owner` is refused. Agreement never covers an `In Progress` item this session does not hold. Changing one needs the owner of the backlog's explicit word: `start --force` takes over another session's `In Progress` item, and `set <id> --status <status> --force` releases one.
 
 Otherwise a recommendation is not a go: stop and wait for the owner of the backlog's explicit go.
 
