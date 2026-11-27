@@ -1,7 +1,10 @@
 {
-  "board": { "scope": "ramenamok", "channel": "jig" },
+  "board": {
+    "scope": "ramenamok",
+    "channel": "smoke-pnpm"
+  },
   "backlog": {
     "dataSource": "41f3d7d1-79ad-8045-a361-000b56ae7f12",
-    "project": "Jig"
+    "project": "Smoke Pnpm"
   }
 }

@@ -1,9 +1,18 @@
-# No pre-commit formatter: template files carry {{PLACEHOLDERS}} and are
-# formatted in the stamp, not here (see docs/DECISIONS.md, 2026-11-13).
+# Layers add hooks as fragments under .lefthook/ (e.g. gitleaks from +public).
+extends:
+  - .lefthook/*.yml
+
 pre-commit:
+  parallel: true
   commands:
-    gitleaks:
-      run: gitleaks git --pre-commit --staged --redact --verbose
+    lint:
+      glob: '*.{ts,tsx,js,mjs}'
+      run: pnpm eslint --fix {staged_files}
+      stage_fixed: true
+    format:
+      glob: '*.{ts,tsx,js,mjs,json,md,css,yml,yaml}'
+      run: pnpm prettier --write {staged_files}
+      stage_fixed: true
 
 commit-msg:
   commands:
