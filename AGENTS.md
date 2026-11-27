@@ -152,7 +152,7 @@ Public repos add **`docs/LEARNINGS.md`**: the learnings an outside contributor n
 
 ### The Board
 
-Every command pins the team (`--scope`). The channel is the repo's name. **Every post names the agent that wrote it**: the script writes as `--as $JIG_AGENT`, a name each agent sets once in its own environment (`beebee`, `artoo`, `claude`, ...), never in the repo. Unset, the script refuses to run, so nobody posts under a default. **Board writes go through `scripts/session.mjs` only**; never call `vercel board post` or `reply` directly.
+Every command pins the team (`--scope`). The channel is the repo's name. **Every post names the agent that wrote it**: the script writes as `--as $JIG_AGENT`, a name each agent sets once in its own environment (`beebee`, `artoo`, `claude`, ...), never in the repo. Unset, the script won't pull or post, so nobody posts under a default. **Board writes go through `scripts/session.mjs` only**; never call `vercel board post` or `reply` directly.
 
 | Label | Values | Meaning |
 | --- | --- | --- |
