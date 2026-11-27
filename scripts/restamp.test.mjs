@@ -3,12 +3,15 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import {
+  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -62,6 +65,20 @@ function restampOk(dir, extra) {
   const result = restamp(dir, extra)
   assert.equal(result.status, 0, result.out)
   return result.stdout
+}
+
+// --apply on a project as it would be: everything committed to git, so
+// nothing it overwrites is lost.
+function applyOk(dir, extra = []) {
+  const gitIn = (...args) =>
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', ...args], {
+      cwd: dir,
+      env,
+    })
+  if (!existsSync(join(dir, '.git'))) gitIn('init', '-q', '-b', 'main')
+  gitIn('add', '-A')
+  gitIn('commit', '-q', '--allow-empty', '--no-verify', '-m', 'chore: before re-stamp')
+  return restampOk(dir, [...extra, '--apply'])
 }
 
 const read = (dir, path) => readFileSync(join(dir, path), 'utf8')
@@ -137,6 +154,38 @@ describe('the stamp record', () => {
     for (const line of long.split('\n')) assert.ok(line.length <= 80, line)
   })
 
+  // A record names the commit the files came from. A jig with uncommitted
+  // changes to what it stamps did not stamp that commit, and says so.
+  it('marks a record stamped from a jig with uncommitted changes', () => {
+    const root = join(scratch, `jig-copy-${counter++}`)
+    for (const part of ['scripts', 'template', 'AGENTS.md'])
+      cpSync(join(jigRoot, part), join(root, part), { recursive: true })
+    const gitIn = (...args) =>
+      spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', ...args], {
+        cwd: root,
+        env,
+        encoding: 'utf8',
+      })
+    gitIn('init', '-q', '-b', 'main')
+    gitIn('add', '-A')
+    gitIn('commit', '-q', '--no-verify', '-m', 'jig')
+    const stampFrom = () => {
+      const dir = join(scratch, `stamp-${counter++}`)
+      const result = spawnSync(
+        process.execPath,
+        [join(root, 'scripts/new-project.mjs'), '--name', 'my-thing', '--dir', dir, '--no-git'],
+        { encoding: 'utf8', env },
+      )
+      assert.equal(result.status, 0, result.stderr)
+      return JSON.parse(read(dir, '.jig.json')).jig
+    }
+    assert.equal(stampFrom().dirty, undefined)
+    write(root, 'template/base/CLAUDE.md', '@AGENTS.md\nchanged\n')
+    const record = stampFrom()
+    assert.equal(record.dirty, true)
+    assert.equal(record.commit, gitIn('rev-parse', 'HEAD').stdout.trim())
+  })
+
   it('records the bundle id of a Swift stamp', { skip: !isMac }, () => {
     const dir = stamp([...SWIFT, '--bundle-id', 'au.example.my-thing'])
     assert.equal(JSON.parse(read(dir, '.jig.json')).bundleId, 'au.example.my-thing')
@@ -147,13 +196,14 @@ describe('ownership', () => {
   for (const [label, extra] of Object.entries(COMPOSITIONS))
     it(`classifies every file of a ${label} stamp exactly once`, () => {
       const dir = stamp(extra)
-      const matches = (patterns, path) =>
-        patterns.filter((pattern) =>
-          pattern.endsWith('/') ? path.startsWith(pattern) : path === pattern,
-        ).length
+      const all = [...OWNED, ...SHARED, ...PROJECT]
       for (const path of Object.keys(snapshot(dir))) {
-        const hits =
-          matches(OWNED, path) + matches(SHARED, path) + matches(PROJECT, path)
+        // An exact path carves one file out of a directory pattern.
+        const exact = all.filter((pattern) => pattern === path).length
+        const under = all.filter(
+          (pattern) => pattern.endsWith('/') && path.startsWith(pattern),
+        ).length
+        const hits = exact > 0 ? exact : under
         assert.equal(hits, 1, `${path} matches ${hits} ownership patterns`)
         assert.notEqual(classify(path), 'unclassified', path)
       }
@@ -204,7 +254,7 @@ describe('re-stamp', () => {
       const before = snapshot(dir)
       const report = restampOk(dir)
       assert.match(report, /nothing to do/)
-      restampOk(dir, ['--apply'])
+      applyOk(dir)
       assert.deepEqual(snapshot(dir), before)
     })
 
@@ -228,7 +278,7 @@ describe('re-stamp', () => {
     write(dir, '.claude/skills/session-start/SKILL.md', 'stale\n')
     write(dir, '.claude/skills/session-start/extra.md', 'left by an old jig\n')
     rmSync(join(dir, 'local/README.md'))
-    restampOk(dir, [...PNPM, '--apply'])
+    applyOk(dir, [...PNPM])
     const now = snapshot(dir)
     for (const path of Object.keys(fresh).filter(
       (path) => classify(path) === 'owned',
@@ -240,7 +290,7 @@ describe('re-stamp', () => {
   it('never touches project-owned files', () => {
     const dir = stamp(PNPM)
     age(dir)
-    restampOk(dir, [...PNPM, '--apply']) // settles the migrations
+    applyOk(dir, [...PNPM]) // settles the migrations
     write(dir, 'AGENTS.md', '# mine\n')
     write(dir, 'DEVIATIONS.md', '# mine\n')
     write(dir, 'docs/DECISIONS.md', '# mine\n')
@@ -250,7 +300,7 @@ describe('re-stamp', () => {
     edit(dir, 'session.config.json', (text) => text.replace('ramenamok', 'acme'))
     write(dir, 'docs/STANDARDS.md', 'drifted\n')
     const before = snapshot(dir)
-    restampOk(dir, ['--apply'])
+    applyOk(dir)
     const now = snapshot(dir)
     delete before['docs/STANDARDS.md']
     delete now['docs/STANDARDS.md']
@@ -272,7 +322,7 @@ describe('re-stamp', () => {
     edit(dir, 'lefthook.yml', (text) => text.replace('pnpm verify', 'pnpm test'))
     rmSync(join(dir, 'commitlint.config.js'))
     const before = snapshot(dir)
-    const report = restampOk(dir, ['--apply'])
+    const report = applyOk(dir)
     assert.deepEqual(snapshot(dir), before)
 
     assert.match(report, /scripts\.verify/)
@@ -292,7 +342,7 @@ describe('re-stamp', () => {
     const dir = stamp(PNPM)
     rmSync(join(dir, 'DEVIATIONS.md'))
     rmSync(join(dir, 'apps/www'), { recursive: true })
-    const report = restampOk(dir, ['--apply'])
+    const report = applyOk(dir)
     assert.match(report, /absent +DEVIATIONS\.md/)
     assert.doesNotMatch(report, /apps\/www/)
     assert.equal(existsSync(join(dir, 'DEVIATIONS.md')), false)
@@ -303,7 +353,7 @@ describe('re-stamp', () => {
     edit(dir, '.jig.json', (text) =>
       text.replace(/"commit": "[0-9a-f]+"/, '"commit": "0000000"'),
     )
-    const report = restampOk(dir, ['--apply'])
+    const report = applyOk(dir)
     assert.match(report, /0000000/)
     const record = JSON.parse(read(dir, '.jig.json'))
     assert.match(record.jig.commit, /^[0-9a-f]{40}$/)
@@ -321,7 +371,7 @@ describe('re-stamp', () => {
   it('re-stamps a repo with no record from explicit flavors, and records them', () => {
     const dir = stamp([...BUN, '--title', 'MyThing'])
     age(dir)
-    restampOk(dir, [...BUN, '--apply'])
+    applyOk(dir, [...BUN])
     const record = JSON.parse(read(dir, '.jig.json'))
     assert.equal(record.name, 'my-thing')
     assert.equal(record.title, 'MyThing') // read back from session.config.json
@@ -332,7 +382,7 @@ describe('re-stamp', () => {
 
   it('lets explicit flags change a recorded composition', () => {
     const dir = stamp(['--flavors', 'web-vite'])
-    const report = restampOk(dir, ['--layers', 'public', '--apply'])
+    const report = applyOk(dir, ['--layers', 'public'])
     assert.match(report, /create +\.lefthook\/gitleaks\.yml/)
     assert.match(report, /missing +CONTRIBUTING\.md/)
     assert.deepEqual(JSON.parse(read(dir, '.jig.json')).layers, ['public'])
@@ -343,7 +393,7 @@ describe('re-stamp', () => {
     age(dir)
     write(dir, 'docs/SWIFT.md', 'old\n')
     const sources = read(dir, 'apps/app/Sources/MyThingApp.swift')
-    restampOk(dir, [...SWIFT, '--bundle-id', 'au.example.my-thing', '--apply'])
+    applyOk(dir, [...SWIFT, '--bundle-id', 'au.example.my-thing'])
     assert.notEqual(read(dir, 'docs/SWIFT.md'), 'old\n')
     assert.equal(read(dir, 'apps/app/Sources/MyThingApp.swift'), sources)
     assert.equal(JSON.parse(read(dir, '.jig.json')).bundleId, 'au.example.my-thing')
@@ -432,7 +482,7 @@ describe('migrations', () => {
     assert.match(dry, /migrate +session\.config\.json.*board\.profile/)
     assert.equal(JSON.parse(read(dir, 'session.config.json')).board.profile, 'claude')
 
-    restampOk(dir, [...PNPM, '--apply'])
+    applyOk(dir, [...PNPM])
     assert.deepEqual(JSON.parse(read(dir, 'session.config.json')), {
       board: { scope: 'acme', channel: 'my-thing' },
       backlog: {
@@ -448,5 +498,99 @@ describe('migrations', () => {
     const text = '{"board":{"scope":"acme","channel":"x"},"backlog":{}}'
     assert.equal(migration.migrate(text), null)
     assert.equal(migration.migrate('not json'), null)
+  })
+})
+
+describe('apply safety', () => {
+  const identity = ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid']
+  const gitIn = (cwd, ...args) =>
+    spawnSync('git', [...identity, ...args], { cwd, env, encoding: 'utf8' })
+  const committed = (dir) => {
+    gitIn(dir, 'init', '-q', '-b', 'main')
+    gitIn(dir, 'add', '-A')
+    gitIn(dir, 'commit', '-q', '--no-verify', '-m', 'chore: stamp')
+    return dir
+  }
+
+  it('never writes through a symlinked jig-owned file', () => {
+    const dir = stamp(PNPM)
+    rmSync(join(dir, 'CLAUDE.md'))
+    symlinkSync('AGENTS.md', join(dir, 'CLAUDE.md'))
+    committed(dir)
+    const agents = read(dir, 'AGENTS.md')
+    const result = restamp(dir, ['--apply'])
+    assert.notEqual(result.status, 0, result.out)
+    assert.match(result.stderr, /symlink/)
+    assert.equal(read(dir, 'AGENTS.md'), agents)
+    assert.ok(lstatSync(join(dir, 'CLAUDE.md')).isSymbolicLink())
+  })
+
+  it('refuses --apply outside a git work tree unless forced', () => {
+    const dir = stamp(PNPM)
+    edit(dir, 'CLAUDE.md', (text) => `${text}mine\n`)
+    const result = restamp(dir, ['--apply'])
+    assert.notEqual(result.status, 0, result.out)
+    assert.match(result.stderr, /not a git work tree/)
+    assert.match(read(dir, 'CLAUDE.md'), /mine/)
+    restampOk(dir, ['--apply', '--force'])
+    assert.doesNotMatch(read(dir, 'CLAUDE.md'), /mine/)
+  })
+
+  it('refuses to remove or overwrite a gitignored file in a jig-owned path', () => {
+    const dir = stamp(PNPM)
+    edit(dir, '.gitignore', (text) => `${text}.claude/\n`)
+    committed(dir)
+    write(dir, '.claude/skills/session-start/mine.md', 'mine\n')
+    const result = restamp(dir, ['--apply'])
+    assert.notEqual(result.status, 0, result.out)
+    assert.match(result.stderr, /mine\.md/)
+    assert.equal(read(dir, '.claude/skills/session-start/mine.md'), 'mine\n')
+  })
+
+  it('refuses to recreate a tracked jig-owned file deleted in the work tree', () => {
+    const dir = stamp(PNPM)
+    write(dir, 'docs/STANDARDS.md', 'old, but committed\n')
+    committed(dir)
+    rmSync(join(dir, 'scripts/session.mjs'))
+    const result = restamp(dir, ['--apply'])
+    assert.notEqual(result.status, 0, result.out)
+    assert.match(result.stderr, /scripts\/session\.mjs/)
+  })
+})
+
+describe('read-back and report', () => {
+  it('reads the bundle id back from project.yml when there is no record', { skip: !isMac }, () => {
+    const dir = stamp([...SWIFT, '--bundle-id', 'com.acme.swifty'])
+    age(dir)
+    applyOk(dir, [...SWIFT])
+    assert.equal(JSON.parse(read(dir, '.jig.json')).bundleId, 'com.acme.swifty')
+  })
+
+  it("reports the www app's ignore step when it differs from the jig", () => {
+    const dir = stamp(PNPM)
+    edit(dir, 'apps/www/vercel.json', (text) =>
+      text.replace(/"ignoreCommand": ".*"/, '"ignoreCommand": "git diff --quiet HEAD^ HEAD"'),
+    )
+    const before = snapshot(dir)
+    const report = applyOk(dir)
+    assert.match(report, /apps\/www\/vercel\.json/)
+    assert.match(report, /HEAD\^/)
+    assert.deepEqual(snapshot(dir), before)
+  })
+
+  it('says nothing of the www ignore step when the project has no www app', () => {
+    const dir = stamp(PNPM)
+    rmSync(join(dir, 'apps/www'), { recursive: true })
+    assert.doesNotMatch(restampOk(dir), /apps\/www/)
+  })
+
+  it('reports a root package.json that lost its workspaces', () => {
+    const dir = stamp(BUN)
+    edit(dir, 'package.json', (text) => {
+      const pkg = JSON.parse(text)
+      delete pkg.workspaces
+      return `${JSON.stringify(pkg, null, 2)}\n`
+    })
+    assert.match(restampOk(dir), /workspaces/)
   })
 })

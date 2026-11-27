@@ -310,8 +310,13 @@ const jigGit = (...gitArgs) => {
 // A jig that is not a git checkout (a tarball, a copy) has no commit to name.
 const isJigCheckout = jigGit('rev-parse', '--show-toplevel') !== null &&
   resolve(jigGit('rev-parse', '--show-toplevel')) === realpathSync(jigRoot)
+// Uncommitted changes to what the jig stamps mean the files did not come from
+// that commit: the record says so rather than naming it alone.
 const jigVersion = {
   commit: isJigCheckout ? jigGit('rev-parse', 'HEAD') : null,
+  isDirty:
+    isJigCheckout &&
+    Boolean(jigGit('status', '--porcelain', '--', 'template', 'AGENTS.md', 'scripts')),
   date:
     (isJigCheckout && jigGit('log', '-1', '--format=%cI')) ||
     new Date().toISOString().slice(0, 10),
@@ -341,7 +346,8 @@ const jigVersion = {
     '{',
     '  "jig": {',
     `    "commit": ${JSON.stringify(jigVersion.commit)},`,
-    `    "date": ${JSON.stringify(jigVersion.date)}`,
+    `    "date": ${JSON.stringify(jigVersion.date)}${jigVersion.isDirty ? ',' : ''}`,
+    ...(jigVersion.isDirty ? ['    "dirty": true'] : []),
     '  },',
     `  "name": ${JSON.stringify(args.name)},`,
     `  "title": ${JSON.stringify(title)},`,

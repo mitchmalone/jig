@@ -2,9 +2,11 @@
 // what it may write (scripts/restamp.mjs). Paths are as stamped (`.gitignore`,
 // not `_gitignore`); a pattern ending in `/` covers the whole directory.
 //
-// Every file the template ships must match exactly one pattern: a test stamps
-// each composition and fails on a file that matches none or two. Adding a
-// template file means deciding here who owns it.
+// Every file the template ships must have exactly one owner: a test stamps
+// each composition and fails on a file that matches none, or two. An exact
+// path listed under OWNED or SHARED carves that one file out of a PROJECT
+// directory (apps/www/vercel.json). Adding a template file means deciding
+// here who owns it.
 
 // The jig's: tested in the jig, copied unchanged, replaced whole on a
 // re-stamp. An owned directory is replaced whole too: a file in it that the
@@ -42,6 +44,7 @@ export const SHARED = [
   'Brewfile',
   'rust-toolchain.toml',
   'vercel.json',
+  'apps/www/vercel.json',
   '.github/',
   'CONTRIBUTING.md',
   'CODE_OF_CONDUCT.md',

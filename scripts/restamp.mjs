@@ -7,7 +7,8 @@
 //                                      # otherwise they change the composition
 //     [--name n] [--title "T"] [--bundle-id id]   # when they can't be read back
 //     [--reference <dir>]   # keep the fresh stamp it compares against
-//     [--force]             # overwrite uncommitted changes to jig-owned files
+//     [--force]             # write anyway: uncommitted or ignored changes,
+//                           # symlinks, a target outside git
 //
 // It stamps the project's composition afresh into a scratch directory and
 // compares, by owner (scripts/restamp-rules.mjs):
@@ -18,6 +19,7 @@
 import { spawnSync } from 'node:child_process'
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -92,7 +94,15 @@ const layers = args.layers ?? record?.layers ?? []
 const name = args.name ?? record?.name ?? readJson('package.json')?.name
 if (!name) fail('cannot tell the project name: no .jig.json or package.json name. Pass --name')
 const title = args.title ?? record?.title ?? sessionConfig?.backlog?.project
-const bundleId = args.bundleId ?? record?.bundleId
+// A repo stamped before the record keeps its bundle id in the XcodeGen spec.
+const bundleId =
+  args.bundleId ??
+  record?.bundleId ??
+  (existsSync(join(target, 'apps/app/project.yml'))
+    ? readFileSync(join(target, 'apps/app/project.yml'), 'utf8').match(
+        /PRODUCT_BUNDLE_IDENTIFIER:\s*['"]?([A-Za-z0-9.-]+)/,
+      )?.[1]
+    : undefined)
 
 // --- the reference: today's stamp of the same composition --------------------
 
@@ -101,6 +111,8 @@ const scratch = args.reference
   : mkdtempSync(join(tmpdir(), 'jig-restamp-'))
 const reference = args.reference ? resolve(args.reference) : join(scratch, name)
 const cleanUp = () => scratch && rmSync(scratch, { recursive: true, force: true })
+// Every exit, a fail() or a throw included, takes the scratch stamp with it.
+process.on('exit', cleanUp)
 
 {
   const optional = (flag, value) => (value ? [flag, value] : [])
@@ -125,7 +137,6 @@ const cleanUp = () => scratch && rmSync(scratch, { recursive: true, force: true 
     { encoding: 'utf8', env: withoutRepoGitEnv() },
   )
   if (stamped.status !== 0) {
-    cleanUp()
     fail(`could not stamp the reference:\n${stamped.stderr.trim()}`)
   }
 }
@@ -139,7 +150,16 @@ const filesUnder = (root, dir = '') => {
     .map((entry) => relative(root, join(entry.parentPath, entry.name)))
 }
 const text = (root, path) => readFileSync(join(root, path), 'utf8')
-const here = (path) => existsSync(join(target, path))
+// lstat, not exists: a dangling symlink is still there, and still not ours.
+const lstat = (path) => {
+  try {
+    return lstatSync(join(target, path))
+  } catch {
+    return null
+  }
+}
+const here = (path) => lstat(path) !== null
+const isLink = (path) => lstat(path)?.isSymbolicLink() ?? false
 
 // A calling git hook exports GIT_DIR (and more in a worktree), which would
 // point git at the hook's repo instead of the project.
@@ -164,7 +184,7 @@ function packageDrift(path) {
   }
   const lines = []
   const show = (value) => JSON.stringify(value)
-  for (const key of ['type', 'packageManager', 'engines'])
+  for (const key of ['type', 'packageManager', 'engines', 'workspaces'])
     if (show(jig[key]) !== show(mine[key]))
       lines.push(`${key}: jig ${show(jig[key])} · here ${show(mine[key])}`)
   for (const group of ['scripts', 'dependencies', 'devDependencies'])
@@ -220,13 +240,16 @@ for (const path of filesUnder(reference).sort()) {
   if (owner === 'owned') {
     const content = text(reference, path)
     if (!here(path)) writes.push({ path, action: 'create', content })
-    else if (text(target, path) !== content)
+    else if (!existsSync(join(target, path)) || text(target, path) !== content)
       writes.push({ path, action: 'update', content })
     else ownedCurrent++
   } else if (owner === 'shared' || owner === 'unclassified') {
     if (owner === 'unclassified') unclassified.push(path)
-    if (!here(path)) missingShared.push(path)
-    else {
+    if (!here(path)) {
+      // A shared file inside an app the project does not have is not missing.
+      const app = path.match(/^(?:apps|packages)\/[^/]+\//)?.[0]
+      if (!app || here(app)) missingShared.push(path)
+    } else {
       const lines = drift(path)
       if (lines.length > 0) shared.push({ path, lines })
     }
@@ -250,8 +273,10 @@ for (const { file, summary, migrate } of MIGRATIONS) {
 // --- report -----------------------------------------------------------------
 
 const out = []
-const version = ({ commit, date } = {}) =>
-  commit ? `${commit.slice(0, 12)} (${String(date).slice(0, 10)})` : 'an unrecorded jig'
+const version = ({ commit, date, dirty } = {}) =>
+  commit
+    ? `${commit.slice(0, 12)} (${String(date).slice(0, 10)})${dirty ? ' with uncommitted changes' : ''}`
+    : `an unversioned jig (${String(date).slice(0, 10)})`
 const jigNow = JSON.parse(text(reference, '.jig.json')).jig
 
 out.push(`re-stamp ${name} at ${target}${args.apply ? '' : ' (dry run)'}`)
@@ -262,7 +287,7 @@ out.push(`  layers:       ${layers.join(', ') || '(none)'}`)
 
 out.push('', `jig-owned: replaced whole${args.apply ? '' : ' with --apply'}`)
 for (const { path, action } of writes.filter((write) => write.action !== 'migrate'))
-  out.push(`  ${action.padEnd(8)}${path}`)
+  out.push(`  ${action.padEnd(8)}${path}${isLink(path) ? ' (a symlink here: --apply refuses it without --force)' : ''}`)
 out.push(`  ${ownedCurrent} already current`)
 
 const migrations = writes.filter((write) => write.action === 'migrate')
@@ -298,27 +323,46 @@ const clean =
 
 // --- apply ------------------------------------------------------------------
 
+// What --apply would lose without git to get it back: a change not
+// committed (staged, unstaged, untracked, deleted), a gitignored file, or a
+// symlink the project chose (writing through it would change its target).
 if (args.apply && writes.length > 0 && !args.force) {
-  const inRepo = git(['rev-parse', '--is-inside-work-tree'], target).status === 0
-  const dirty = inRepo
-    ? git(
-        ['status', '--porcelain', '--', ...writes.filter(({ path }) => here(path)).map(({ path }) => path)],
-        target,
-      ).stdout.trim()
-    : ''
-  if (dirty) {
-    cleanUp()
+  const links = writes.filter(({ path }) => isLink(path)).map(({ path }) => path)
+  if (links.length > 0)
     fail(
-      `these files have uncommitted changes that --apply would overwrite; commit or stash them, or pass --force:\n${dirty}`,
+      `these jig-owned paths are symlinks here, and --apply would write through them; replace them with files, or pass --force to replace the links:\n${links.join('\n')}`,
     )
-  }
+  const inRepo =
+    git(['rev-parse', '--is-inside-work-tree'], target).stdout?.trim() === 'true'
+  if (!inRepo)
+    fail(
+      `${target} is not a git work tree, so --apply could not be undone; commit it to git first, or pass --force`,
+    )
+  const status = git(
+    [
+      '--literal-pathspecs',
+      'status',
+      '--porcelain',
+      '--ignored',
+      '--untracked-files=all',
+      '--',
+      ...writes.map(({ path }) => path),
+    ],
+    target,
+  )
+  if (status.status !== 0) fail(`git status failed in ${target}: ${status.stderr.trim()}`)
+  const dirty = status.stdout.trimEnd()
+  if (dirty)
+    fail(
+      `these files have uncommitted changes, or are gitignored, and --apply would overwrite or remove them; commit or stash them, or pass --force:\n${dirty}`,
+    )
 }
 
 if (args.apply)
   for (const { path, action, content } of writes) {
     const file = join(target, path)
-    if (action === 'remove') rmSync(file)
-    else {
+    if (action === 'remove' || isLink(path)) rmSync(file)
+    if (action !== 'remove') {
       mkdirSync(dirname(file), { recursive: true })
       writeFileSync(file, content)
     }
@@ -339,4 +383,3 @@ else
 
 if (args.reference) out.push(`reference stamp kept at ${reference}`)
 console.log(out.join('\n'))
-cleanUp()
